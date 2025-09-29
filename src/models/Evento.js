@@ -51,6 +51,12 @@ const eventoSchema = new mongoose.Schema({
     enum: ['principiante', 'intermedio', 'avanzado', 'mixto'],
     default: 'mixto'
   },
+  rol: {
+    type: String,
+    required: [true, 'El rol es obligatorio'],
+    enum: ['organizador', 'participante'],
+    default: 'organizador'
+  },
   precio: {
     type: Number,
     default: 0,
@@ -71,32 +77,37 @@ const eventoSchema = new mongoose.Schema({
   },
   organizador: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Usuario',
-    required: true
+    ref: 'Usuario'
   },
   requisitos: [{
-    type: String,
-    trim: true
+    type: String
   }],
+  activo: {
+    type: Boolean,
+    default: true
+  },
+  destacado: {
+    type: Boolean,
+    default: false
+  },
   equipos: [{
-    nombre: {
-      type: String,
-      required: true
-    },
+    nombre: String,
     integrantes: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Usuario'
-    }],
-    puntos: {
-      type: Number,
-      default: 0
-    }
+    }]
   }],
   inscripciones: [{
     usuario: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Usuario',
       required: true
+    },
+    datosInscripcion: {
+      nombre: String,
+      email: String,
+      telefono: String,
+      emergencia: String
     },
     fechaInscripcion: {
       type: Date,
@@ -106,25 +117,8 @@ const eventoSchema = new mongoose.Schema({
       type: String,
       enum: ['pendiente', 'confirmada', 'cancelada'],
       default: 'pendiente'
-    },
-    pago: {
-      realizado: {
-        type: Boolean,
-        default: false
-      },
-      metodo: String,
-      referencia: String,
-      fecha: Date
     }
-  }],
-  activo: {
-    type: Boolean,
-    default: true
-  },
-  destacado: {
-    type: Boolean,
-    default: false
-  }
+  }]
 }, {
   timestamps: true
 });
@@ -132,15 +126,7 @@ const eventoSchema = new mongoose.Schema({
 // Índices
 eventoSchema.index({ fecha: 1, activo: 1 });
 eventoSchema.index({ tipo: 1, activo: 1 });
-eventoSchema.index({ organizador: 1 });
-
-// Middleware para actualizar cupo disponible
-eventoSchema.pre('save', function(next) {
-  if (this.isModified('inscripciones')) {
-    const confirmadas = this.inscripciones.filter(ins => ins.estado === 'confirmada').length;
-    this.cupoDisponible = this.cupoMaximo - confirmadas;
-  }
-  next();
-});
+eventoSchema.index({ rol: 1, activo: 1 });
+eventoSchema.index({ titulo: 'text', descripcion: 'text' });
 
 module.exports = mongoose.model('Evento', eventoSchema);
