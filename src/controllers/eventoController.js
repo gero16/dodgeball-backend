@@ -65,16 +65,152 @@ const obtenerEventos = async (req, res) => {
   }
 };
 
-// Obtener evento por ID
+// Obtener estadísticas de una liga
+const obtenerEstadisticasLiga = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const evento = await Evento.findById(id);
+    if (!evento || evento.tipo !== 'liga') {
+      return res.status(404).json({
+        success: false,
+        message: 'Liga no encontrada'
+      });
+    }
+
+    const liga = evento.datosEspecificos?.liga;
+    if (!liga) {
+      return res.status(404).json({
+        success: false,
+        message: 'Datos de liga no disponibles'
+      });
+    }
+
+    // Ordenar equipos por puntos
+    const equiposOrdenados = [...liga.equipos].sort((a, b) => {
+      if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+      return b.diferenciaGoles - a.diferenciaGoles;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        liga: {
+          temporada: liga.temporada,
+          division: liga.division,
+          formato: liga.formato,
+          equipos: equiposOrdenados,
+          partidos: liga.partidos,
+          reglas: liga.reglas,
+          premios: liga.premios
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas de liga:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener estadísticas de un campeonato
+const obtenerEstadisticasCampeonato = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const evento = await Evento.findById(id);
+    if (!evento || evento.tipo !== 'campeonato') {
+      return res.status(404).json({
+        success: false,
+        message: 'Campeonato no encontrado'
+      });
+    }
+
+    const campeonato = evento.datosEspecificos?.campeonato;
+    if (!campeonato) {
+      return res.status(404).json({
+        success: false,
+        message: 'Datos de campeonato no disponibles'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        campeonato: {
+          formato: campeonato.formato,
+          fases: campeonato.fases,
+          bracket: campeonato.bracket,
+          premios: campeonato.premios
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas de campeonato:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener estadísticas de participación internacional
+const obtenerEstadisticasParticipacion = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const evento = await Evento.findById(id);
+    if (!evento || evento.rol !== 'participante') {
+      return res.status(404).json({
+        success: false,
+        message: 'Participación no encontrada'
+      });
+    }
+
+    const participacion = evento.datosEspecificos?.participacion;
+    if (!participacion) {
+      return res.status(404).json({
+        success: false,
+        message: 'Datos de participación no disponibles'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        participacion: {
+          pais: participacion.pais,
+          ciudad: participacion.ciudad,
+          organizador: participacion.organizador,
+          categoria: participacion.categoria,
+          posicion: participacion.posicion,
+          totalParticipantes: participacion.totalParticipantes,
+          resultados: participacion.resultados,
+          estadisticas: participacion.estadisticas,
+          logros: participacion.logros,
+          medallas: participacion.medallas
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas de participación:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener un evento por ID
 const obtenerEvento = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const evento = await Evento.findById(id)
-      .populate('organizador', 'nombre email')
-      .populate('inscripciones.usuario', 'nombre email');
-
-    if (!evento || !evento.activo) {
+    
+    const evento = await Evento.findById(id).populate('organizador', 'nombre email');
+    
+    if (!evento) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
@@ -94,40 +230,44 @@ const obtenerEvento = async (req, res) => {
   }
 };
 
-// Crear nuevo evento
+// Crear un nuevo evento
 const crearEvento = async (req, res) => {
   try {
     const {
       titulo,
       descripcion,
       fecha,
+      fechaFin,
       horaInicio,
       horaFin,
       ubicacion,
       tipo,
       categoria,
+      rol,
       precio,
       cupoMaximo,
       requisitos,
-      destacado
+      organizador,
+      datosEspecificos
     } = req.body;
 
     const evento = new Evento({
       titulo,
       descripcion,
       fecha,
+      fechaFin,
       horaInicio,
       horaFin,
       ubicacion,
       tipo,
       categoria,
+      rol,
       precio,
       cupoMaximo,
       cupoDisponible: cupoMaximo,
-      requisitos: requisitos || [],
-      destacado: destacado || false,
-      organizador: req.usuario.id,
-      imagen: req.file ? req.file.path : ''
+      requisitos,
+      organizador,
+      datosEspecificos
     });
 
     await evento.save();
@@ -147,61 +287,24 @@ const crearEvento = async (req, res) => {
   }
 };
 
-// Actualizar evento
+// Actualizar un evento
 const actualizarEvento = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      titulo,
-      descripcion,
-      fecha,
-      horaInicio,
-      horaFin,
-      ubicacion,
-      tipo,
-      categoria,
-      precio,
-      cupoMaximo,
-      requisitos,
-      destacado
-    } = req.body;
+    const updates = req.body;
 
-    const evento = await Evento.findById(id);
+    const evento = await Evento.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true, runValidators: true }
+    ).populate('organizador', 'nombre email');
+
     if (!evento) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
-
-    // Verificar permisos (organizador o admin)
-    if (evento.organizador.toString() !== req.usuario.id && req.usuario.rol !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'No tienes permisos para editar este evento'
-      });
-    }
-
-    // Actualizar campos
-    if (titulo) evento.titulo = titulo;
-    if (descripcion) evento.descripcion = descripcion;
-    if (fecha) evento.fecha = fecha;
-    if (horaInicio) evento.horaInicio = horaInicio;
-    if (horaFin) evento.horaFin = horaFin;
-    if (ubicacion) evento.ubicacion = ubicacion;
-    if (tipo) evento.tipo = tipo;
-    if (categoria) evento.categoria = categoria;
-    if (precio !== undefined) evento.precio = precio;
-    if (cupoMaximo) {
-      evento.cupoMaximo = cupoMaximo;
-      evento.cupoDisponible = cupoMaximo - evento.inscripciones.filter(ins => ins.estado === 'confirmada').length;
-    }
-    if (requisitos) evento.requisitos = requisitos;
-    if (destacado !== undefined) evento.destacado = destacado;
-    if (req.file) evento.imagen = req.file.path;
-
-    await evento.save();
-    await evento.populate('organizador', 'nombre email');
 
     res.json({
       success: true,
@@ -217,30 +320,23 @@ const actualizarEvento = async (req, res) => {
   }
 };
 
-// Eliminar evento
+// Eliminar un evento
 const eliminarEvento = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const evento = await Evento.findById(id);
+    const evento = await Evento.findByIdAndUpdate(
+      id,
+      { activo: false },
+      { new: true }
+    );
+
     if (!evento) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
-
-    // Verificar permisos (organizador o admin)
-    if (evento.organizador.toString() !== req.usuario.id && req.usuario.rol !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'No tienes permisos para eliminar este evento'
-      });
-    }
-
-    // Desactivar en lugar de eliminar
-    evento.activo = false;
-    await evento.save();
 
     res.json({
       success: true,
@@ -255,24 +351,71 @@ const eliminarEvento = async (req, res) => {
   }
 };
 
-// Inscribirse en evento
-const inscribirseEvento = async (req, res) => {
+// Obtener tipos de eventos
+const obtenerTiposEventos = async (req, res) => {
+  try {
+    const tipos = await Evento.distinct('tipo', { activo: true });
+    res.json({
+      success: true,
+      data: { tipos }
+    });
+  } catch (error) {
+    console.error('Error al obtener tipos de eventos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener eventos destacados
+const obtenerEventosDestacados = async (req, res) => {
+  try {
+    const eventos = await Evento.find({
+      activo: true,
+      destacado: true
+    })
+    .populate('organizador', 'nombre email')
+    .sort({ fecha: -1 })
+    .limit(6);
+
+    res.json({
+      success: true,
+      data: { eventos }
+    });
+  } catch (error) {
+    console.error('Error al obtener eventos destacados:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Inscribir usuario a evento
+const inscribirUsuario = async (req, res) => {
   try {
     const { id } = req.params;
-    const { observaciones } = req.body;
-    const usuarioId = req.usuario.id;
+    const { usuarioId, datosInscripcion } = req.body;
 
     const evento = await Evento.findById(id);
-    if (!evento || !evento.activo) {
+    if (!evento) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
 
+    if (evento.cupoDisponible <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay cupos disponibles'
+      });
+    }
+
     // Verificar si ya está inscrito
-    const yaInscrito = evento.inscripciones.find(
-      ins => ins.usuario.toString() === usuarioId
+    const yaInscrito = evento.inscripciones.some(
+      inscripcion => inscripcion.usuario.toString() === usuarioId
     );
 
     if (yaInscrito) {
@@ -282,80 +425,23 @@ const inscribirseEvento = async (req, res) => {
       });
     }
 
-    // Verificar cupo disponible
-    if (evento.cupoDisponible <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No hay cupo disponible para este evento'
-      });
-    }
-
     // Agregar inscripción
-    const inscripcion = {
+    evento.inscripciones.push({
       usuario: usuarioId,
-      observaciones: observaciones || ''
-    };
+      datosInscripcion,
+      fechaInscripcion: new Date()
+    });
 
-    evento.inscripciones.push(inscripcion);
+    evento.cupoDisponible -= 1;
     await evento.save();
 
     res.json({
       success: true,
-      message: 'Inscripción realizada exitosamente',
+      message: 'Inscripción exitosa',
       data: { evento }
     });
   } catch (error) {
-    console.error('Error al inscribirse en evento:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor'
-    });
-  }
-};
-
-// Obtener eventos próximos
-const obtenerProximos = async (req, res) => {
-  try {
-    const ahora = new Date();
-    const eventos = await Evento.find({
-      activo: true,
-      fecha: { $gte: ahora }
-    })
-      .populate('organizador', 'nombre email')
-      .sort({ fecha: 1 })
-      .limit(5);
-
-    res.json({
-      success: true,
-      data: { eventos }
-    });
-  } catch (error) {
-    console.error('Error al obtener eventos próximos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor'
-    });
-  }
-};
-
-// Obtener eventos pasados
-const obtenerPasados = async (req, res) => {
-  try {
-    const ahora = new Date();
-    const eventos = await Evento.find({
-      activo: true,
-      fecha: { $lt: ahora }
-    })
-      .populate('organizador', 'nombre email')
-      .sort({ fecha: -1 })
-      .limit(10);
-
-    res.json({
-      success: true,
-      data: { eventos }
-    });
-  } catch (error) {
-    console.error('Error al obtener eventos pasados:', error);
+    console.error('Error al inscribir usuario:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -369,7 +455,10 @@ module.exports = {
   crearEvento,
   actualizarEvento,
   eliminarEvento,
-  inscribirseEvento,
-  obtenerProximos,
-  obtenerPasados
+  obtenerTiposEventos,
+  obtenerEventosDestacados,
+  inscribirUsuario,
+  obtenerEstadisticasLiga,
+  obtenerEstadisticasCampeonato,
+  obtenerEstadisticasParticipacion
 };

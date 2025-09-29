@@ -6,24 +6,32 @@ const {
   crearEvento,
   actualizarEvento,
   eliminarEvento,
-  inscribirseEvento,
-  obtenerProximos,
-  obtenerPasados
+  obtenerTiposEventos,
+  obtenerEventosDestacados,
+  inscribirUsuario,
+  obtenerEstadisticasLiga,
+  obtenerEstadisticasCampeonato,
+  obtenerEstadisticasParticipacion
 } = require('../controllers/eventoController');
+
 const { auth } = require('../middleware/auth');
 const { validateEvento } = require('../middleware/validation');
-const { upload, handleUploadError } = require('../middleware/upload');
 
 // Rutas públicas
 router.get('/', obtenerEventos);
+router.get('/tipos', obtenerTiposEventos);
+router.get('/destacados', obtenerEventosDestacados);
 router.get('/:id', obtenerEvento);
-router.get('/proximos/lista', obtenerProximos);
-router.get('/pasados/lista', obtenerPasados);
+
+// Rutas de estadísticas específicas
+router.get('/:id/estadisticas/liga', obtenerEstadisticasLiga);
+router.get('/:id/estadisticas/campeonato', obtenerEstadisticasCampeonato);
+router.get('/:id/estadisticas/participacion', obtenerEstadisticasParticipacion);
 
 // Rutas protegidas
-router.post('/crear', auth, upload.single('imagen'), handleUploadError, validateEvento, crearEvento);
-router.put('/:id', auth, upload.single('imagen'), handleUploadError, validateEvento, actualizarEvento);
+router.post('/', auth, validateEvento, crearEvento);
+router.put('/:id', auth, validateEvento, actualizarEvento);
 router.delete('/:id', auth, eliminarEvento);
-router.post('/:id/inscribirse', auth, inscribirseEvento);
+router.post('/:id/inscribir', auth, inscribirUsuario);
 
 module.exports = router;

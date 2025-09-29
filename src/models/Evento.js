@@ -44,7 +44,7 @@ const eventoSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: [true, 'El tipo es obligatorio'],
-    enum: ['torneo', 'entrenamiento', 'liga', 'social', 'benefico']
+    enum: ['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'casual', 'campeonato', 'practica', 'no-deportivo']
   },
   categoria: {
     type: String,
@@ -90,6 +90,144 @@ const eventoSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  
+  // Datos específicos por tipo de evento
+  datosEspecificos: {
+    // Para ligas
+    liga: {
+      temporada: String,
+      division: String,
+      formato: {
+        type: String,
+        enum: ['todos-contra-todos', 'eliminacion-directa', 'mixto']
+      },
+      equipos: [{
+        nombre: String,
+        logo: String,
+        puntos: { type: Number, default: 0 },
+        partidosJugados: { type: Number, default: 0 },
+        partidosGanados: { type: Number, default: 0 },
+        partidosEmpatados: { type: Number, default: 0 },
+        partidosPerdidos: { type: Number, default: 0 },
+        golesFavor: { type: Number, default: 0 },
+        golesContra: { type: Number, default: 0 },
+        diferenciaGoles: { type: Number, default: 0 }
+      }],
+      partidos: [{
+        fecha: Date,
+        equipoLocal: String,
+        equipoVisitante: String,
+        golesLocal: Number,
+        golesVisitante: Number,
+        estado: {
+          type: String,
+          enum: ['programado', 'en-curso', 'finalizado', 'cancelado'],
+          default: 'programado'
+        },
+        estadisticas: {
+          tarjetasAmarillas: Number,
+          tarjetasRojas: Number,
+          tiempoJuego: Number
+        }
+      }],
+      reglas: [String],
+      premios: [{
+        posicion: Number,
+        premio: String,
+        valor: Number
+      }]
+    },
+    
+    // Para campeonatos
+    campeonato: {
+      formato: {
+        type: String,
+        enum: ['eliminacion-simple', 'eliminacion-doble', 'grupos-y-eliminacion', 'todos-contra-todos']
+      },
+      fases: [{
+        nombre: String,
+        fechaInicio: Date,
+        fechaFin: Date,
+        equipos: [String],
+        partidos: [{
+          fecha: Date,
+          equipo1: String,
+          equipo2: String,
+          resultado: String,
+          estadisticas: mongoose.Schema.Types.Mixed
+        }]
+      }],
+      bracket: {
+        octavos: [mongoose.Schema.Types.Mixed],
+        cuartos: [mongoose.Schema.Types.Mixed],
+        semifinales: [mongoose.Schema.Types.Mixed],
+        final: mongoose.Schema.Types.Mixed,
+        tercerPuesto: mongoose.Schema.Types.Mixed
+      },
+      premios: [{
+        posicion: Number,
+        premio: String,
+        valor: Number,
+        ganador: String
+      }]
+    },
+    
+    // Para participaciones internacionales
+    participacion: {
+      pais: String,
+      ciudad: String,
+      organizador: String,
+      categoria: String,
+      posicion: Number,
+      totalParticipantes: Number,
+      resultados: [{
+        fase: String,
+        rival: String,
+        resultado: String,
+        fecha: Date
+      }],
+      estadisticas: {
+        partidosJugados: Number,
+        partidosGanados: Number,
+        partidosPerdidos: Number,
+        golesFavor: Number,
+        golesContra: Number
+      },
+      logros: [String],
+      medallas: [{
+        tipo: {
+          type: String,
+          enum: ['oro', 'plata', 'bronce']
+        },
+        categoria: String
+      }]
+    },
+    
+    // Para entrenamientos/prácticas
+    practica: {
+      nivel: {
+        type: String,
+        enum: ['principiante', 'intermedio', 'avanzado', 'mixto']
+      },
+      instructor: String,
+      duracion: Number, // en minutos
+      materialNecesario: [String],
+      objetivos: [String]
+    },
+    
+    // Para eventos sociales/no deportivos
+    social: {
+      tipoEvento: {
+        type: String,
+        enum: ['reunion', 'fiesta', 'charla', 'taller', 'otro']
+      },
+      incluyeComida: Boolean,
+      incluyeBebidas: Boolean,
+      actividades: [String]
+    }
+  },
+  
+  // Campos comunes para todos los eventos
   equipos: [{
     nombre: String,
     integrantes: [{
