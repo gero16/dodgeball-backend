@@ -1,0 +1,12 @@
+{
+  "build": {
+    "commands": {
+      "install": "npm ci",
+      "start": "npm start"
+    }
+  },
+  "environment": {
+    "NODE_ENV": "production",
+    "PORT": "3000"
+  }
+}
