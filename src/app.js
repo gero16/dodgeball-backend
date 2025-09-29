@@ -38,10 +38,30 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// CORS
+// Configuración de CORS para permitir múltiples orígenes
+const allowedOrigins = [
+  'http://localhost:5173',    // Vite dev server
+  'http://localhost:3000',    // React dev server
+  'http://localhost:8080',    // Otro puerto común
+  'https://tu-frontend.com',  // Tu dominio de producción
+  process.env.FRONTEND_URL     // Variable de entorno
+].filter(Boolean); // Eliminar valores undefined
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (como mobile apps o Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
 }));
 
 // Middleware para parsear JSON
@@ -100,6 +120,14 @@ app.use((req, res) => {
 // Middleware global de manejo de errores
 app.use((error, req, res, next) => {
   console.error('Error:', error);
+  
+  // Error de CORS
+  if (error.message === 'No permitido por CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'Origen no permitido por CORS'
+    });
+  }
   
   // Error de validación de Mongoose
   if (error.name === 'ValidationError') {
