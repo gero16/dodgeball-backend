@@ -1,94 +1,163 @@
-# Guía de Despliegue - Railpack
+# Guía de Despliegue - Railway
 
-## 🚀 Despliegue en Railpack
+## 🚂 Despliegue en Railway
 
 ### 1. Configuración Previa
 
-Antes de desplegar, asegúrate de tener configurado:
+Antes de desplegar, asegúrate de tener:
 
-- **MongoDB Atlas**: Base de datos en la nube
-- **Variables de entorno**: Configuradas en Railpack
-- **Dominio**: Para el frontend (opcional)
+- **Servicio MongoDB** en Railway
+- **Variables de entorno** configuradas
+- **Dominio** para el frontend (opcional)
 
-### 2. Variables de Entorno Requeridas
+### 2. Configuración de MongoDB en Railway
 
-Configura estas variables en el panel de Railpack:
+Railway proporciona MongoDB como un servicio interno. Las variables de entorno se configuran automáticamente.
+
+#### Variables de Railway MongoDB:
 
 ```env
+# Variables principales (Railway las proporciona automáticamente)
+MONGOHOST=containers-us-west-xxx.railway.app
+MONGOPORT=27017
+MONGOUSER=root
+MONGOPASSWORD=tu_password_generado
+MONGODATABASE=dodgeball-club
+
+# O alternativamente
+MONGO_URL=mongodb://root:password@containers-us-west-xxx.railway.app:27017/dodgeball-club
+```
+
+### 3. Configuración en Railway
+
+1. **Crear servicio MongoDB**:
+   - En Railway, crea un nuevo servicio
+   - Selecciona "Database" > "MongoDB"
+   - Railway configurará automáticamente las variables
+
+2. **Configurar variables en tu backend**:
+   - Ve a tu servicio de backend
+   - Pestaña "Variables"
+   - Railway debería mostrar las variables de MongoDB disponibles
+   - Agrega las variables necesarias
+
+### 4. Variables de Entorno Requeridas
+
+```env
+# MongoDB (Railway proporciona estas automáticamente)
+MONGOHOST=containers-us-west-xxx.railway.app
+MONGOPORT=27017
+MONGOUSER=root
+MONGOPASSWORD=tu_password_generado
+MONGODATABASE=dodgeball-club
+
+# O usar MONGO_URL directamente
+MONGO_URL=mongodb://root:password@containers-us-west-xxx.railway.app:27017/dodgeball-club
+
+# Backend
 NODE_ENV=production
 PORT=3000
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dodgeball-club
 JWT_SECRET=tu_jwt_secret_muy_seguro_para_produccion
 JWT_EXPIRES_IN=7d
 FRONTEND_URL=https://tu-frontend.com
+
+# Email (opcional)
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=tu_email@gmail.com
 EMAIL_PASS=tu_password_de_aplicacion
+
+# PayPal (opcional)
 PAYPAL_CLIENT_ID=tu_paypal_client_id
 PAYPAL_CLIENT_SECRET=tu_paypal_client_secret
 PAYPAL_MODE=live
+
+# Uploads
 MAX_FILE_SIZE=5242880
 UPLOAD_PATH=uploads
+
+# Socket.io
 SOCKET_CORS_ORIGIN=https://tu-frontend.com
 ```
 
-### 3. Comandos de Despliegue
+### 5. Comandos de Despliegue
 
-Railpack ejecutará automáticamente:
+Railway ejecutará automáticamente:
 
 ```bash
 npm ci
 npm start
 ```
 
-### 4. Verificación Post-Despliegue
+### 6. Verificación Post-Despliegue
 
 Una vez desplegado, verifica:
 
 1. **Health Check**: `GET /api/health`
 2. **API Root**: `GET /`
-3. **Endpoints**: Todos los endpoints funcionando
+3. **Logs**: Revisa que no haya errores de MongoDB
 
-### 5. Configuración de MongoDB Atlas
+### 7. Solución de Problemas
 
-1. Crea un cluster en MongoDB Atlas
-2. Configura un usuario de base de datos
-3. Obtén la cadena de conexión
-4. Actualiza la variable `MONGODB_URI`
+#### Error: ENOTFOUND containers-us-west-xxx.railway.app
 
-### 6. Configuración de PayPal (Opcional)
+**Causa**: El servicio MongoDB no está ejecutándose o la URL es incorrecta
 
-1. Crea una cuenta de desarrollador en PayPal
-2. Obtén las credenciales de la aplicación
-3. Configura las variables `PAYPAL_*`
+**Solución**:
+1. Verifica que el servicio MongoDB esté activo en Railway
+2. Copia la URL correcta desde el panel de Railway
+3. Asegúrate de que las variables estén configuradas correctamente
 
-### 7. Configuración de Email (Opcional)
+#### Error: Authentication failed
 
-1. Configura un servicio SMTP (Gmail, SendGrid, etc.)
-2. Configura las variables `EMAIL_*`
+**Causa**: Credenciales incorrectas
 
-### 8. Monitoreo
+**Solución**:
+1. Verifica `MONGOUSER` y `MONGOPASSWORD`
+2. Asegúrate de que las credenciales sean las correctas del panel de Railway
 
-- Revisa los logs en el panel de Railpack
-- Monitorea el rendimiento
-- Configura alertas si es necesario
+#### Error: Connection timeout
 
-## 🔧 Solución de Problemas
+**Causa**: El servicio MongoDB no está accesible
 
-### Error de Dependencias
-Si hay problemas con `npm ci`, ejecuta:
+**Solución**:
+1. Verifica que el servicio MongoDB esté ejecutándose
+2. Revisa que no haya problemas de red
+3. Asegúrate de que el puerto sea correcto
+
+### 8. Scripts de Verificación
+
+Puedes probar la conexión localmente:
+
 ```bash
-rm package-lock.json
-npm install
+# Probar conexión a MongoDB (con variables de Railway)
+npm run test-mongodb
+
+# Inicializar base de datos
+npm run init-db
 ```
 
-### Error de MongoDB
-Verifica que la cadena de conexión sea correcta y que el cluster esté accesible.
+### 9. Monitoreo
 
-### Error de Puerto
-Asegúrate de que la variable `PORT` esté configurada correctamente.
+- Revisa los logs en Railway: `railway logs`
+- Monitorea el uso de recursos del servicio MongoDB
+- Configura alertas si es necesario
+
+### 10. Estructura de URL de Railway
+
+Railway genera URLs en este formato:
+
+```
+mongodb://root:password@containers-us-west-xxx.railway.app:27017/database_name
+```
+
+Donde:
+- `root`: Usuario por defecto
+- `password`: Contraseña generada por Railway
+- `containers-us-west-xxx.railway.app`: Host del servicio
+- `27017`: Puerto por defecto
+- `database_name`: Nombre de tu base de datos
 
 ## 📞 Soporte
 
-Para problemas específicos de Railpack, consulta su documentación oficial.
+Para problemas específicos de Railway, consulta la [documentación de Railway](https://docs.railway.app/).

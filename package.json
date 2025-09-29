@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "init-db": "node scripts/init-db.js",
+    "test-mongodb": "node scripts/test-mongodb.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["dodgeball", "api", "express", "mongodb", "jwt"],

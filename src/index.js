@@ -1,5 +1,5 @@
 const app = require('./app');
-const conectarDB = require('./config/database');
+const conectarDB = require('./config/mongodb');
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -49,21 +49,35 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
-  console.log(`🗄️  Base de datos: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/dodgeball-club'}`);
+  console.log(`🗄️  Base de datos: ${process.env.MONGODB_URI ? 'Configurada' : 'No configurada'}`);
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // Manejar errores no capturados
 process.on('unhandledRejection', (err, promise) => {
   console.error('Error no manejado:', err);
-  server.close(() => {
-    process.exit(1);
-  });
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Reiniciando servidor...');
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  } else {
+    server.close(() => {
+      process.exit(1);
+    });
+  }
 });
 
 process.on('uncaughtException', (err) => {
   console.error('Excepción no capturada:', err);
-  process.exit(1);
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Reiniciando servidor...');
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
+  } else {
+    process.exit(1);
+  }
 });
 
 // Manejar cierre graceful del servidor

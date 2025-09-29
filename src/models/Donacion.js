@@ -81,6 +81,6 @@ const donacionSchema = new mongoose.Schema({
 // Índices
 donacionSchema.index({ 'donante.email': 1 });
 donacionSchema.index({ estado: 1, fechaPago: -1 });
-donacionSchema.index({ transaccionId: 1 });
+// Removemos el índice duplicado de transaccionId ya que está definido como unique arriba
 
 module.exports = mongoose.model('Donacion', donacionSchema);
