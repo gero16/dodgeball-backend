@@ -28,13 +28,12 @@ const conectarDB = async () => {
     console.log('📍 Host:', process.env.MONGOHOST || 'No especificado');
     console.log('🗄️  Base de datos:', process.env.MONGODATABASE || 'dodgeball-club');
 
-    // Opciones de conexión optimizadas para Railway
+    // Opciones de conexión actualizadas (sin opciones obsoletas)
     const options = {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
-      bufferMaxEntries: 0,
-      bufferCommands: false,
+      // Removemos las opciones obsoletas
     };
 
     const conn = await mongoose.connect(mongoUri, options);

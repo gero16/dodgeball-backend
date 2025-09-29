@@ -1,20 +1,10 @@
 # Guía de Despliegue - Railway
 
-## 🚂 Despliegue en Railway
+## 🚂 Configuración para Railway
 
-### 1. Configuración Previa
+### Variables de Entorno de MongoDB
 
-Antes de desplegar, asegúrate de tener:
-
-- **Servicio MongoDB** en Railway
-- **Variables de entorno** configuradas
-- **Dominio** para el frontend (opcional)
-
-### 2. Configuración de MongoDB en Railway
-
-Railway proporciona MongoDB como un servicio interno. Las variables de entorno se configuran automáticamente.
-
-#### Variables de Railway MongoDB:
+Railway proporciona MongoDB con estas variables automáticamente:
 
 ```env
 # Variables principales (Railway las proporciona automáticamente)
@@ -28,31 +18,15 @@ MONGODATABASE=dodgeball-club
 MONGO_URL=mongodb://root:password@containers-us-west-xxx.railway.app:27017/dodgeball-club
 ```
 
-### 3. Configuración en Railway
-
-1. **Crear servicio MongoDB**:
-   - En Railway, crea un nuevo servicio
-   - Selecciona "Database" > "MongoDB"
-   - Railway configurará automáticamente las variables
-
-2. **Configurar variables en tu backend**:
-   - Ve a tu servicio de backend
-   - Pestaña "Variables"
-   - Railway debería mostrar las variables de MongoDB disponibles
-   - Agrega las variables necesarias
-
-### 4. Variables de Entorno Requeridas
+### Configuración Completa
 
 ```env
-# MongoDB (Railway proporciona estas automáticamente)
+# MongoDB (Railway)
 MONGOHOST=containers-us-west-xxx.railway.app
 MONGOPORT=27017
 MONGOUSER=root
 MONGOPASSWORD=tu_password_generado
 MONGODATABASE=dodgeball-club
-
-# O usar MONGO_URL directamente
-MONGO_URL=mongodb://root:password@containers-us-west-xxx.railway.app:27017/dodgeball-club
 
 # Backend
 NODE_ENV=production
@@ -80,84 +54,29 @@ UPLOAD_PATH=uploads
 SOCKET_CORS_ORIGIN=https://tu-frontend.com
 ```
 
-### 5. Comandos de Despliegue
+### Pasos para Configurar
 
-Railway ejecutará automáticamente:
+1. **En Railway**:
+   - Crea un servicio MongoDB
+   - Railway configurará automáticamente las variables
 
-```bash
-npm ci
-npm start
-```
+2. **En tu servicio de backend**:
+   - Ve a "Variables"
+   - Railway debería mostrar las variables de MongoDB disponibles
+   - Agrega las variables necesarias
 
-### 6. Verificación Post-Despliegue
-
-Una vez desplegado, verifica:
-
-1. **Health Check**: `GET /api/health`
-2. **API Root**: `GET /`
-3. **Logs**: Revisa que no haya errores de MongoDB
-
-### 7. Solución de Problemas
-
-#### Error: ENOTFOUND containers-us-west-xxx.railway.app
-
-**Causa**: El servicio MongoDB no está ejecutándose o la URL es incorrecta
-
-**Solución**:
-1. Verifica que el servicio MongoDB esté activo en Railway
-2. Copia la URL correcta desde el panel de Railway
-3. Asegúrate de que las variables estén configuradas correctamente
-
-#### Error: Authentication failed
-
-**Causa**: Credenciales incorrectas
-
-**Solución**:
-1. Verifica `MONGOUSER` y `MONGOPASSWORD`
-2. Asegúrate de que las credenciales sean las correctas del panel de Railway
-
-#### Error: Connection timeout
-
-**Causa**: El servicio MongoDB no está accesible
-
-**Solución**:
-1. Verifica que el servicio MongoDB esté ejecutándose
-2. Revisa que no haya problemas de red
-3. Asegúrate de que el puerto sea correcto
-
-### 8. Scripts de Verificación
-
-Puedes probar la conexión localmente:
+### Verificación
 
 ```bash
-# Probar conexión a MongoDB (con variables de Railway)
+# Probar conexión
 npm run test-mongodb
 
-# Inicializar base de datos
-npm run init-db
+# Ver logs en Railway
+railway logs
 ```
 
-### 9. Monitoreo
+### Solución de Problemas
 
-- Revisa los logs en Railway: `railway logs`
-- Monitorea el uso de recursos del servicio MongoDB
-- Configura alertas si es necesario
-
-### 10. Estructura de URL de Railway
-
-Railway genera URLs en este formato:
-
-```
-mongodb://root:password@containers-us-west-xxx.railway.app:27017/database_name
-```
-
-Donde:
-- `root`: Usuario por defecto
-- `password`: Contraseña generada por Railway
-- `containers-us-west-xxx.railway.app`: Host del servicio
-- `27017`: Puerto por defecto
-- `database_name`: Nombre de tu base de datos
-
-## 📞 Soporte
-
-Para problemas específicos de Railway, consulta la [documentación de Railway](https://docs.railway.app/).
+- **ENOTFOUND**: Verifica que MONGOHOST esté correcto
+- **Authentication failed**: Verifica MONGOUSER y MONGOPASSWORD
+- **Connection timeout**: Verifica que el servicio MongoDB esté activo
