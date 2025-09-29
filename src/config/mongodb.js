@@ -5,12 +5,23 @@ const conectarDB = async () => {
     // Para Railway, usar las variables de entorno específicas de MongoDB
     let mongoUri;
     
+    console.log('🔍 Variables de entorno disponibles:');
+    console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'Configurada' : 'No configurada');
+    console.log('- MONGO_URL:', process.env.MONGO_URL ? 'Configurada' : 'No configurada');
+    console.log('- MONGOHOST:', process.env.MONGOHOST || 'No configurada');
+    console.log('- MONGOUSER:', process.env.MONGOUSER || 'No configurada');
+    console.log('- MONGOPASSWORD:', process.env.MONGOPASSWORD ? 'Configurada' : 'No configurada');
+    console.log('- MONGOPORT:', process.env.MONGOPORT || 'No configurada');
+    console.log('- MONGODATABASE:', process.env.MONGODATABASE || 'No configurada');
+    
     if (process.env.MONGODB_URI) {
       // Si MONGODB_URI está configurada, usarla
       mongoUri = process.env.MONGODB_URI;
+      console.log('🔗 Usando MONGODB_URI');
     } else if (process.env.MONGO_URL) {
       // Railway usa MONGO_URL por defecto
       mongoUri = process.env.MONGO_URL;
+      console.log('🔗 Usando MONGO_URL');
     } else if (process.env.MONGOHOST && process.env.MONGOUSER && process.env.MONGOPASSWORD) {
       // Construir URL desde variables individuales de Railway
       const host = process.env.MONGOHOST;
@@ -20,6 +31,7 @@ const conectarDB = async () => {
       const database = process.env.MONGODATABASE || 'dodgeball-club';
       
       mongoUri = `mongodb://${user}:${password}@${host}:${port}/${database}`;
+      console.log('🔗 Construyendo URL desde variables individuales');
     } else {
       throw new Error('No se encontró configuración de MongoDB. Verifica las variables de entorno.');
     }
@@ -33,7 +45,6 @@ const conectarDB = async () => {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
-      // Removemos las opciones obsoletas
     };
 
     const conn = await mongoose.connect(mongoUri, options);
@@ -64,12 +75,6 @@ const conectarDB = async () => {
         conectarDB();
       }, 5000);
     } else {
-      console.log('💡 Variables de entorno disponibles:');
-      console.log('- MONGODB_URI:', process.env.MONGODB_URI ? 'Configurada' : 'No configurada');
-      console.log('- MONGO_URL:', process.env.MONGO_URL ? 'Configurada' : 'No configurada');
-      console.log('- MONGOHOST:', process.env.MONGOHOST || 'No configurada');
-      console.log('- MONGOUSER:', process.env.MONGOUSER || 'No configurada');
-      console.log('- MONGOPASSWORD:', process.env.MONGOPASSWORD ? 'Configurada' : 'No configurada');
       process.exit(1);
     }
   }

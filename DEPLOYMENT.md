@@ -1,32 +1,12 @@
-# Guía de Despliegue - Railway
+# Guía de Despliegue
 
-## 🚂 Configuración para Railway
+## 🚀 Despliegue en Railway
 
-### Variables de Entorno de MongoDB
-
-Railway proporciona MongoDB con estas variables automáticamente:
+### Variables de Entorno Requeridas
 
 ```env
-# Variables principales (Railway las proporciona automáticamente)
-MONGOHOST=containers-us-west-xxx.railway.app
-MONGOPORT=27017
-MONGOUSER=root
-MONGOPASSWORD=tu_password_generado
-MONGODATABASE=dodgeball-club
-
-# O alternativamente
-MONGO_URL=mongodb://root:password@containers-us-west-xxx.railway.app:27017/dodgeball-club
-```
-
-### Configuración Completa
-
-```env
-# MongoDB (Railway)
-MONGOHOST=containers-us-west-xxx.railway.app
-MONGOPORT=27017
-MONGOUSER=root
-MONGOPASSWORD=tu_password_generado
-MONGODATABASE=dodgeball-club
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://usuario_node:usuario_node@cluster0.onw6d.mongodb.net/dodgeball?retryWrites=true&w=majority
 
 # Backend
 NODE_ENV=production
@@ -54,29 +34,32 @@ UPLOAD_PATH=uploads
 SOCKET_CORS_ORIGIN=https://tu-frontend.com
 ```
 
-### Pasos para Configurar
+### Pasos para Desplegar
 
-1. **En Railway**:
-   - Crea un servicio MongoDB
-   - Railway configurará automáticamente las variables
-
-2. **En tu servicio de backend**:
-   - Ve a "Variables"
-   - Railway debería mostrar las variables de MongoDB disponibles
-   - Agrega las variables necesarias
+1. **Sube tu código** a Railway
+2. **Configura las variables** de entorno
+3. **Railway ejecutará** automáticamente:
+   ```bash
+   npm ci
+   npm start
+   ```
 
 ### Verificación
 
+Una vez desplegado, verifica:
+- `GET /api/health` - Debería responder correctamente
+- Logs sin errores de MongoDB
+- Base de datos conectada
+
+### Comandos Útiles
+
 ```bash
-# Probar conexión
+# Probar conexión localmente
 npm run test-mongodb
 
-# Ver logs en Railway
-railway logs
+# Inicializar base de datos
+npm run init-db
+
+# Ejecutar en desarrollo
+npm run dev
 ```
-
-### Solución de Problemas
-
-- **ENOTFOUND**: Verifica que MONGOHOST esté correcto
-- **Authentication failed**: Verifica MONGOUSER y MONGOPASSWORD
-- **Connection timeout**: Verifica que el servicio MongoDB esté activo
