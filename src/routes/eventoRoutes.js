@@ -11,6 +11,8 @@ const {
   inscribirUsuario,
   obtenerEstadisticasLiga,
   obtenerEstadisticasCampeonato,
+  obtenerFixtureCampeonato,
+  obtenerTablaCampeonato,
   obtenerEstadisticasParticipacion
 } = require('../controllers/eventoController');
 
@@ -27,6 +29,10 @@ router.get('/:id', obtenerEvento);
 router.get('/:id/estadisticas/liga', obtenerEstadisticasLiga);
 router.get('/:id/estadisticas/campeonato', obtenerEstadisticasCampeonato);
 router.get('/:id/estadisticas/participacion', obtenerEstadisticasParticipacion);
+
+// Rutas específicas de campeonatos
+router.get('/:id/fixture', obtenerFixtureCampeonato);
+router.get('/:id/tabla', obtenerTablaCampeonato);
 
 // Rutas protegidas
 router.post('/', auth, validateEvento, crearEvento);

@@ -136,19 +136,187 @@ const obtenerEstadisticasCampeonato = async (req, res) => {
       });
     }
 
+    // Ordenar equipos por puntos (si hay grupos)
+    let equiposOrdenados = campeonato.equipos || [];
+    if (equiposOrdenados.length > 0) {
+      equiposOrdenados = [...equiposOrdenados].sort((a, b) => {
+        if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+        return b.diferenciaGoles - a.diferenciaGoles;
+      });
+    }
+
+    // Obtener todos los partidos
+    const todosPartidos = [];
+    if (campeonato.grupos) {
+      campeonato.grupos.forEach(grupo => {
+        todosPartidos.push(...grupo.partidos.map(p => ({ ...p, fase: grupo.nombre })));
+      });
+    }
+    if (campeonato.eliminatorias) {
+      campeonato.eliminatorias.forEach(eliminatoria => {
+        todosPartidos.push(...eliminatoria.partidos.map(p => ({ ...p, fase: eliminatoria.fase })));
+      });
+    }
+
     res.json({
       success: true,
       data: {
         campeonato: {
           formato: campeonato.formato,
-          fases: campeonato.fases,
-          bracket: campeonato.bracket,
-          premios: campeonato.premios
+          equipos: equiposOrdenados,
+          grupos: campeonato.grupos || [],
+          eliminatorias: campeonato.eliminatorias || [],
+          bracket: campeonato.bracket || {},
+          todosPartidos: todosPartidos,
+          reglas: campeonato.reglas || [],
+          premios: campeonato.premios || []
         }
       }
     });
   } catch (error) {
     console.error('Error al obtener estadísticas de campeonato:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener fixture de un campeonato
+const obtenerFixtureCampeonato = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const evento = await Evento.findById(id);
+    if (!evento || evento.tipo !== 'campeonato') {
+      return res.status(404).json({
+        success: false,
+        message: 'Campeonato no encontrado'
+      });
+    }
+
+    const campeonato = evento.datosEspecificos?.campeonato;
+    if (!campeonato) {
+      return res.status(404).json({
+        success: false,
+        message: 'Datos de campeonato no disponibles'
+      });
+    }
+
+    // Organizar partidos por fecha
+    const partidosPorFecha = {};
+    const todosPartidos = [];
+
+    if (campeonato.grupos) {
+      campeonato.grupos.forEach(grupo => {
+        grupo.partidos.forEach(partido => {
+          const fecha = new Date(partido.fecha).toISOString().split('T')[0];
+          if (!partidosPorFecha[fecha]) {
+            partidosPorFecha[fecha] = [];
+          }
+          partidosPorFecha[fecha].push({
+            ...partido,
+            fase: grupo.nombre,
+            grupo: grupo.nombre
+          });
+          todosPartidos.push({
+            ...partido,
+            fase: grupo.nombre,
+            grupo: grupo.nombre
+          });
+        });
+      });
+    }
+
+    if (campeonato.eliminatorias) {
+      campeonato.eliminatorias.forEach(eliminatoria => {
+        eliminatoria.partidos.forEach(partido => {
+          const fecha = new Date(partido.fecha).toISOString().split('T')[0];
+          if (!partidosPorFecha[fecha]) {
+            partidosPorFecha[fecha] = [];
+          }
+          partidosPorFecha[fecha].push({
+            ...partido,
+            fase: eliminatoria.fase
+          });
+          todosPartidos.push({
+            ...partido,
+            fase: eliminatoria.fase
+          });
+        });
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        fixture: {
+          partidosPorFecha,
+          todosPartidos: todosPartidos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener fixture:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener tabla de posiciones de un campeonato
+const obtenerTablaCampeonato = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const evento = await Evento.findById(id);
+    if (!evento || evento.tipo !== 'campeonato') {
+      return res.status(404).json({
+        success: false,
+        message: 'Campeonato no encontrado'
+      });
+    }
+
+    const campeonato = evento.datosEspecificos?.campeonato;
+    if (!campeonato) {
+      return res.status(404).json({
+        success: false,
+        message: 'Datos de campeonato no disponibles'
+      });
+    }
+
+    // Organizar equipos por grupo
+    const equiposPorGrupo = {};
+    if (campeonato.equipos) {
+      campeonato.equipos.forEach(equipo => {
+        const grupo = equipo.grupo || 'General';
+        if (!equiposPorGrupo[grupo]) {
+          equiposPorGrupo[grupo] = [];
+        }
+        equiposPorGrupo[grupo].push(equipo);
+      });
+    }
+
+    // Ordenar equipos por puntos en cada grupo
+    Object.keys(equiposPorGrupo).forEach(grupo => {
+      equiposPorGrupo[grupo].sort((a, b) => {
+        if (b.puntos !== a.puntos) return b.puntos - a.puntos;
+        return b.diferenciaGoles - a.diferenciaGoles;
+      });
+    });
+
+    res.json({
+      success: true,
+      data: {
+        tabla: {
+          equiposPorGrupo,
+          formato: campeonato.formato
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener tabla:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -460,5 +628,7 @@ module.exports = {
   inscribirUsuario,
   obtenerEstadisticasLiga,
   obtenerEstadisticasCampeonato,
+  obtenerFixtureCampeonato,
+  obtenerTablaCampeonato,
   obtenerEstadisticasParticipacion
 };
