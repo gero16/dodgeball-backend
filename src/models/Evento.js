@@ -13,7 +13,11 @@ const eventoSchema = new mongoose.Schema({
   },
   fecha: {
     type: Date,
-    required: [true, 'La fecha es obligatoria']
+    required: [true, 'La fecha de inicio es obligatoria']
+  },
+  fechaFin: {
+    type: Date,
+    required: false // Opcional
   },
   horaInicio: {
     type: String,
