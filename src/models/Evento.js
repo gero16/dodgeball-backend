@@ -46,6 +46,12 @@ const eventoSchema = new mongoose.Schema({
     required: [true, 'El tipo es obligatorio'],
     enum: ['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'casual', 'campeonato', 'practica', 'no-deportivo']
   },
+  tipoJuego: {
+    type: String,
+    required: [true, 'El tipo de juego es obligatorio'],
+    enum: ['foam', 'cloth'],
+    default: 'foam'
+  },
   categoria: {
     type: String,
     enum: ['principiante', 'intermedio', 'avanzado', 'mixto'],
@@ -125,9 +131,24 @@ const eventoSchema = new mongoose.Schema({
           default: 'programado'
         },
         estadisticas: {
-          tarjetasAmarillas: Number,
-          tarjetasRojas: Number,
-          tiempoJuego: Number
+          local: {
+            hits: { type: Number, default: 0 },
+            catches: { type: Number, default: 0 },
+            dodges: { type: Number, default: 0 },
+            bloqueos: { type: Number, default: 0 },
+            quemados: { type: Number, default: 0 },
+            tarjetasAmarillas: { type: Number, default: 0 },
+            tarjetasRojas: { type: Number, default: 0 }
+          },
+          visitante: {
+            hits: { type: Number, default: 0 },
+            catches: { type: Number, default: 0 },
+            dodges: { type: Number, default: 0 },
+            bloqueos: { type: Number, default: 0 },
+            quemados: { type: Number, default: 0 },
+            tarjetasAmarillas: { type: Number, default: 0 },
+            tarjetasRojas: { type: Number, default: 0 }
+          }
         }
       }],
       reglas: [String],

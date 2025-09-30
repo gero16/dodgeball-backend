@@ -95,36 +95,67 @@ const obtenerEvento = async (req, res) => {
 // Crear un nuevo evento
 const crearEvento = async (req, res) => {
   try {
-    const eventoData = req.body;
-    
-    // Asignar el organizador desde el token si está disponible
-    if (req.user) {
-      eventoData.organizador = req.user.id;
-    }
+    const {
+      titulo,
+      descripcion,
+      fecha,
+      fechaFin,
+      horaInicio,
+      horaFin,
+      ubicacion,
+      tipo,
+      tipoJuego, // Nuevo campo
+      categoria,
+      precio,
+      cupoMaximo,
+      cupoDisponible,
+      imagen,
+      requisitos,
+      datosEspecificos
+    } = req.body;
 
-    const evento = new Evento(eventoData);
-    await evento.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Evento creado exitosamente',
-      data: { evento }
-    });
-  } catch (error) {
-    console.error('Error al crear evento:', error);
-    
-    if (error.name === 'ValidationError') {
-      const errores = Object.values(error.errors).map(err => err.message);
+    // Validar que tipoJuego sea válido
+    if (tipoJuego && !['foam', 'cloth'].includes(tipoJuego)) {
       return res.status(400).json({
         success: false,
-        message: 'Error de validación',
-        errores
+        message: 'El tipo de juego debe ser "foam" o "cloth"'
       });
     }
 
+    const nuevoEvento = new Evento({
+      titulo,
+      descripcion,
+      fecha,
+      fechaFin,
+      horaInicio,
+      horaFin,
+      ubicacion,
+      tipo,
+      tipoJuego: tipoJuego || 'foam', // Default a 'foam' si no se especifica
+      categoria,
+      precio,
+      cupoMaximo,
+      cupoDisponible,
+      imagen,
+      requisitos,
+      datosEspecificos,
+      organizador: req.user.id
+    });
+
+    const eventoGuardado = await nuevoEvento.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Evento creado exitosamente',
+      data: eventoGuardado
+    });
+
+  } catch (error) {
+    console.error('Error al crear evento:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor'
+      message: 'Error interno del servidor',
+      error: error.message
     });
   }
 };
@@ -133,44 +164,71 @@ const crearEvento = async (req, res) => {
 const actualizarEvento = async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const {
+      titulo,
+      descripcion,
+      fecha,
+      fechaFin,
+      horaInicio,
+      horaFin,
+      ubicacion,
+      tipo,
+      tipoJuego, // Nuevo campo
+      categoria,
+      precio,
+      cupoMaximo,
+      cupoDisponible,
+      imagen,
+      requisitos,
+      datosEspecificos
+    } = req.body;
 
-    console.log('🔍 Actualizando evento:', id);
-    console.log('📦 Datos recibidos:', JSON.stringify(updates, null, 2));
+    // Validar que tipoJuego sea válido si se proporciona
+    if (tipoJuego && !['foam', 'cloth'].includes(tipoJuego)) {
+      return res.status(400).json({
+        success: false,
+        message: 'El tipo de juego debe ser "foam" o "cloth"'
+      });
+    }
 
-    const evento = await Evento.findByIdAndUpdate(
+    const eventoActualizado = await Evento.findByIdAndUpdate(
       id,
-      updates,
+      {
+        titulo,
+        descripcion,
+        fecha,
+        fechaFin,
+        horaInicio,
+        horaFin,
+        ubicacion,
+        tipo,
+        tipoJuego, // Incluir en la actualización
+        categoria,
+        precio,
+        cupoMaximo,
+        cupoDisponible,
+        imagen,
+        requisitos,
+        datosEspecificos
+      },
       { new: true, runValidators: true }
-    ).populate('organizador', 'nombre email');
+    );
 
-    if (!evento) {
+    if (!eventoActualizado) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
 
-    console.log('✅ Evento actualizado exitosamente');
-
     res.json({
       success: true,
       message: 'Evento actualizado exitosamente',
-      data: { evento }
+      data: eventoActualizado
     });
-  } catch (error) {
-    console.error('❌ Error al actualizar evento:', error);
-    
-    if (error.name === 'ValidationError') {
-      const errores = Object.values(error.errors).map(err => err.message);
-      console.log('🚨 Errores de validación:', errores);
-      return res.status(400).json({
-        success: false,
-        message: 'Error de validación',
-        errores
-      });
-    }
 
+  } catch (error) {
+    console.error('Error al actualizar evento:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor',
@@ -591,26 +649,49 @@ const actualizarEstadisticasPartido = async (req, res) => {
     const { id, partidoId } = req.params;
     const { estadisticas } = req.body;
 
+    console.log('🔍 DEBUG - ID del evento:', id);
+    console.log('🔍 DEBUG - ID del partido:', partidoId);
+    console.log('🔍 DEBUG - Estadísticas recibidas:', JSON.stringify(estadisticas, null, 2));
+
     const evento = await Evento.findById(id);
     if (!evento) {
+      console.log('❌ DEBUG - Evento no encontrado');
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
 
-    const partidos = evento.datosEspecificos?.liga?.partidos || [];
+    // Crear una copia profunda de los datos específicos
+    const datosEspecificos = JSON.parse(JSON.stringify(evento.datosEspecificos || {}));
+    const partidos = datosEspecificos.liga?.partidos || [];
+    
+    console.log('🔍 DEBUG - Partidos encontrados:', partidos.length);
+    console.log('🔍 DEBUG - IDs de partidos:', partidos.map(p => p._id?.toString()));
+
     const partidoIndex = partidos.findIndex(p => p._id?.toString() === partidoId);
+    console.log('🔍 DEBUG - Índice del partido encontrado:', partidoIndex);
     
     if (partidoIndex === -1) {
+      console.log('❌ DEBUG - Partido no encontrado');
       return res.status(404).json({
         success: false,
         message: 'Partido no encontrado'
       });
     }
 
+    console.log('🔍 DEBUG - Partido antes de actualizar:', JSON.stringify(partidos[partidoIndex], null, 2));
+    
+    // Asignar las estadísticas directamente
     partidos[partidoIndex].estadisticas = estadisticas;
+    
+    // Actualizar el evento con los nuevos datos
+    evento.datosEspecificos = datosEspecificos;
+    
+    console.log('🔍 DEBUG - Partido después de actualizar:', JSON.stringify(partidos[partidoIndex], null, 2));
+    
     await evento.save();
+    console.log('✅ DEBUG - Evento guardado exitosamente');
 
     res.json({
       success: true,
@@ -618,7 +699,7 @@ const actualizarEstadisticasPartido = async (req, res) => {
       data: { evento }
     });
   } catch (error) {
-    console.error('Error al actualizar estadísticas:', error);
+    console.error('❌ DEBUG - Error al actualizar estadísticas:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
