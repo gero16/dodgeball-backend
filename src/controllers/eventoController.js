@@ -783,7 +783,19 @@ const obtenerPartidoDetalle = async (req, res) => {
 
 // Función auxiliar para recalcular tabla de posiciones
 const recalcularTablaPosiciones = async (evento, partidos) => {
-  const equipos = evento.datosEspecificos?.liga?.equipos || [];
+  console.log('🔄 Recalculando tabla de posiciones...');
+  
+  if (!evento.datosEspecificos) {
+    evento.datosEspecificos = {};
+  }
+  if (!evento.datosEspecificos.liga) {
+    evento.datosEspecificos.liga = {};
+  }
+  if (!evento.datosEspecificos.liga.equipos) {
+    evento.datosEspecificos.liga.equipos = [];
+  }
+  
+  const equipos = evento.datosEspecificos.liga.equipos;
   
   // Resetear estadísticas de equipos
   equipos.forEach(equipo => {
@@ -797,9 +809,13 @@ const recalcularTablaPosiciones = async (evento, partidos) => {
     equipo.diferenciaGoles = 0;
   });
 
+  console.log('📊 Equipos reseteados:', equipos.length);
+
   // Procesar partidos finalizados
   partidos.forEach(partido => {
     if (partido.estado === 'finalizado' && partido.golesLocal !== undefined && partido.golesVisitante !== undefined) {
+      console.log('⚽ Procesando partido:', partido.equipoLocal, 'vs', partido.equipoVisitante, partido.golesLocal, '-', partido.golesVisitante);
+      
       const equipoLocal = equipos.find(e => e.nombre === partido.equipoLocal);
       const equipoVisitante = equipos.find(e => e.nombre === partido.equipoVisitante);
 
@@ -823,19 +839,26 @@ const recalcularTablaPosiciones = async (evento, partidos) => {
           equipoLocal.partidosGanados++;
           equipoLocal.puntos += 3;
           equipoVisitante.partidosPerdidos++;
+          console.log('🏆', equipoLocal.nombre, 'ganó (+3 puntos)');
         } else if (partido.golesLocal < partido.golesVisitante) {
           equipoVisitante.partidosGanados++;
           equipoVisitante.puntos += 3;
           equipoLocal.partidosPerdidos++;
+          console.log('🏆', equipoVisitante.nombre, 'ganó (+3 puntos)');
         } else {
           equipoLocal.partidosEmpatados++;
           equipoLocal.puntos += 1;
           equipoVisitante.partidosEmpatados++;
           equipoVisitante.puntos += 1;
+          console.log('🤝 Empate (+1 punto cada uno)');
         }
+      } else {
+        console.log('❌ Equipos no encontrados:', partido.equipoLocal, partido.equipoVisitante);
       }
     }
   });
+  
+  console.log('✅ Tabla recalculada. Equipos:', equipos.map(e => e.nombre + ': ' + e.puntos + 'pts'));
 };
 
 module.exports = {
