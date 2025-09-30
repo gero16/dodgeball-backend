@@ -43,6 +43,7 @@ const allowedOrigins = [
   'http://localhost:5173',    // Vite dev server
   'http://localhost:3000',    // React dev server
   'http://localhost:8080',    // Otro puerto común
+  'https://dodgeball-kappa.vercel.app',  // Tu dominio de producción en Vercel
   'https://tu-frontend.com',  // Tu dominio de producción
   process.env.FRONTEND_URL     // Variable de entorno
 ].filter(Boolean); // Eliminar valores undefined
@@ -52,10 +53,16 @@ app.use(cors({
     // Permitir requests sin origin (como mobile apps o Postman)
     if (!origin) return callback(null, true);
     
+    // En desarrollo, ser más permisivo
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       console.log('CORS blocked origin:', origin);
+      console.log('Allowed origins:', allowedOrigins);
       callback(new Error('No permitido por CORS'));
     }
   },
