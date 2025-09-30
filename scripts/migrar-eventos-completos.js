@@ -59,65 +59,76 @@ async function migrarEventosCompletos() {
           ],
           partidos: [
             {
-              fecha: new Date('2024-10-15'),
+              fecha: new Date('2024-07-15'),
               equipoLocal: 'Los Guerreros',
               equipoVisitante: 'Los Relámpagos',
               golesLocal: 3,
               golesVisitante: 1,
-              estado: 'finalizado',
-              estadisticas: {
-                tarjetasAmarillas: 2,
-                tarjetasRojas: 0,
-                tiempoJuego: 60
-              }
+              estado: 'finalizado'
+            },
+            {
+              fecha: new Date('2024-07-22'),
+              equipoLocal: 'Los Titanes',
+              equipoVisitante: 'Los Guerreros',
+              golesLocal: 2,
+              golesVisitante: 4,
+              estado: 'finalizado'
             }
           ],
           reglas: [
-            'Partidos de 60 minutos',
-            'Máximo 8 jugadores por equipo',
-            'Sistema de puntos: 3 por victoria, 1 por empate',
-            'En caso de empate, diferencia de goles'
+            '2 tiempos de 12 minutos',
+            '4 minutos de descanso en el entretiempo',
+            '1 set es cuando todo un equipo es quemado'
           ],
           premios: [
             { posicion: 1, premio: 'Trofeo de Campeón', valor: 5000 },
-            { posicion: 2, premio: 'Medalla de Plata', valor: 3000 },
+            { posicion: 2, premio: 'Medalla de Plata', valor: 2500 },
             { posicion: 3, premio: 'Medalla de Bronce', valor: 1000 }
           ]
         };
       } else if (evento.titulo.includes('Panamericano')) {
         // Datos para participaciones internacionales
+        const esArgentina = evento.titulo.includes('Argentina');
+        const equipoLocal = esArgentina ? 'Argentina' : 'Colombia';
+        const pais = esArgentina ? 'Argentina' : 'Colombia';
+        const ciudad = esArgentina ? 'Buenos Aires' : 'Chía-Sopó';
+        const es2025 = evento.titulo.includes('2025');
+        
         datosEspecificos.participacion = {
-          pais: evento.titulo.includes('Argentina') ? 'Argentina' : 'Colombia',
-          ciudad: evento.titulo.includes('Argentina') ? 'Buenos Aires' : 'Chía-Sopó',
+          pais: pais,
+          ciudad: ciudad,
           organizador: 'Federación Panamericana de Dodgeball',
           categoria: 'Mixto',
-          posicion: evento.titulo.includes('2025') ? 8 : 12,
-          totalParticipantes: evento.titulo.includes('2025') ? 12 : 8,
+          posicion: es2025 ? 8 : 12,
+          totalParticipantes: es2025 ? 12 : 8,
+          equipoLocal: equipoLocal,
           resultados: [
             {
               fase: 'Grupos',
               rival: 'Brasil',
               resultado: '2-1',
-              fecha: new Date(evento.fecha)
+              fecha: new Date(evento.fecha),
+              equipoLocal: equipoLocal
             },
             {
               fase: 'Octavos',
               rival: 'México',
-              resultado: evento.titulo.includes('2025') ? '3-2' : '1-3',
-              fecha: new Date(evento.fecha)
+              resultado: es2025 ? '3-2' : '1-3',
+              fecha: new Date(evento.fecha),
+              equipoLocal: equipoLocal
             }
           ],
           estadisticas: {
-            partidosJugados: evento.titulo.includes('2025') ? 6 : 4,
-            partidosGanados: evento.titulo.includes('2025') ? 4 : 1,
-            partidosPerdidos: evento.titulo.includes('2025') ? 2 : 3,
-            golesFavor: evento.titulo.includes('2025') ? 18 : 8,
-            golesContra: evento.titulo.includes('2025') ? 12 : 15
+            partidosJugados: es2025 ? 6 : 4,
+            partidosGanados: es2025 ? 4 : 1,
+            partidosPerdidos: es2025 ? 2 : 3,
+            golesFavor: es2025 ? 18 : 8,
+            golesContra: es2025 ? 12 : 15
           },
-          logros: evento.titulo.includes('2025') 
+          logros: es2025 
             ? ['Clasificación a octavos de final', 'Mejor rendimiento histórico']
             : ['Primera participación internacional'],
-          medallas: evento.titulo.includes('2025') 
+          medallas: es2025 
             ? [{ tipo: 'bronce', categoria: 'Espíritu Deportivo' }]
             : []
         };
