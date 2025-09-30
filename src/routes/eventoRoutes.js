@@ -13,7 +13,14 @@ const {
   obtenerEstadisticasCampeonato,
   obtenerFixtureCampeonato,
   obtenerTablaCampeonato,
-  obtenerEstadisticasParticipacion
+  obtenerEstadisticasParticipacion,
+  // Nuevas rutas para edición de ligas
+  actualizarEquiposLiga,
+  actualizarFixtureLiga,
+  actualizarResultadoPartido,
+  actualizarEstadisticasPartido,
+  actualizarPremiosLiga,
+  obtenerPartidoDetalle
 } = require('../controllers/eventoController');
 
 const { auth } = require('../middleware/auth');
@@ -39,5 +46,13 @@ router.post('/', auth, validateEvento, crearEvento);
 router.put('/:id', auth, validateEvento, actualizarEvento);
 router.delete('/:id', auth, eliminarEvento);
 router.post('/:id/inscribir', auth, inscribirUsuario);
+
+// Nuevas rutas para edición de ligas (protegidas)
+router.put('/:id/equipos', auth, actualizarEquiposLiga);
+router.put('/:id/fixture', auth, actualizarFixtureLiga);
+router.put('/:id/partidos/:partidoId/resultado', auth, actualizarResultadoPartido);
+router.put('/:id/partidos/:partidoId/estadisticas', auth, actualizarEstadisticasPartido);
+router.put('/:id/premios', auth, actualizarPremiosLiga);
+router.get('/:id/partidos/:partidoId', auth, obtenerPartidoDetalle);
 
 module.exports = router;

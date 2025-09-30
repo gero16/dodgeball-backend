@@ -632,3 +632,321 @@ module.exports = {
   obtenerTablaCampeonato,
   obtenerEstadisticasParticipacion
 };
+
+// ===== NUEVOS CONTROLADORES PARA EDICIÓN DE LIGAS =====
+
+// Actualizar equipos de una liga
+const actualizarEquiposLiga = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { equipos } = req.body;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    if (evento.tipo !== 'liga' && evento.tipo !== 'campeonato') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este evento no es una liga o campeonato'
+      });
+    }
+
+    // Actualizar equipos
+    evento.datosEspecificos.liga.equipos = equipos;
+
+    await evento.save();
+
+    res.json({
+      success: true,
+      message: 'Equipos actualizados correctamente',
+      data: evento.datosEspecificos.liga.equipos
+    });
+  } catch (error) {
+    console.error('Error actualizando equipos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Actualizar fixture de una liga
+const actualizarFixtureLiga = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { partidos } = req.body;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    if (evento.tipo !== 'liga' && evento.tipo !== 'campeonato') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este evento no es una liga o campeonato'
+      });
+    }
+
+    // Actualizar partidos
+    evento.datosEspecificos.liga.partidos = partidos;
+
+    await evento.save();
+
+    res.json({
+      success: true,
+      message: 'Fixture actualizado correctamente',
+      data: evento.datosEspecificos.liga.partidos
+    });
+  } catch (error) {
+    console.error('Error actualizando fixture:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Actualizar resultado de un partido específico
+const actualizarResultadoPartido = async (req, res) => {
+  try {
+    const { id, partidoId } = req.params;
+    const { golesLocal, golesVisitante, estado } = req.body;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    // Encontrar el partido
+    const partido = evento.datosEspecificos.liga.partidos.find(p => p._id.toString() === partidoId);
+    if (!partido) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partido no encontrado'
+      });
+    }
+
+    // Actualizar resultado
+    partido.golesLocal = golesLocal;
+    partido.golesVisitante = golesVisitante;
+    partido.estado = estado || 'finalizado';
+
+    // Actualizar estadísticas de equipos
+    await actualizarEstadisticasEquipos(evento, partido);
+
+    await evento.save();
+
+    res.json({
+      success: true,
+      message: 'Resultado actualizado correctamente',
+      data: {
+        partido,
+        equipos: evento.datosEspecificos.liga.equipos
+      }
+    });
+  } catch (error) {
+    console.error('Error actualizando resultado:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Actualizar estadísticas detalladas de un partido
+const actualizarEstadisticasPartido = async (req, res) => {
+  try {
+    const { id, partidoId } = req.params;
+    const { estadisticas } = req.body;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    // Encontrar el partido
+    const partido = evento.datosEspecificos.liga.partidos.find(p => p._id.toString() === partidoId);
+    if (!partido) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partido no encontrado'
+      });
+    }
+
+    // Actualizar estadísticas del partido
+    partido.estadisticas = {
+      ...partido.estadisticas,
+      ...estadisticas
+    };
+
+    await evento.save();
+
+    res.json({
+      success: true,
+      message: 'Estadísticas del partido actualizadas correctamente',
+      data: partido.estadisticas
+    });
+  } catch (error) {
+    console.error('Error actualizando estadísticas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Actualizar premios de una liga
+const actualizarPremiosLiga = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { premios } = req.body;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    if (evento.tipo !== 'liga' && evento.tipo !== 'campeonato') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este evento no es una liga o campeonato'
+      });
+    }
+
+    // Actualizar premios
+    evento.datosEspecificos.liga.premios = premios;
+
+    await evento.save();
+
+    res.json({
+      success: true,
+      message: 'Premios actualizados correctamente',
+      data: evento.datosEspecificos.liga.premios
+    });
+  } catch (error) {
+    console.error('Error actualizando premios:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener detalles de un partido específico
+const obtenerPartidoDetalle = async (req, res) => {
+  try {
+    const { id, partidoId } = req.params;
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    const partido = evento.datosEspecificos.liga.partidos.find(p => p._id.toString() === partidoId);
+    if (!partido) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partido no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: partido
+    });
+  } catch (error) {
+    console.error('Error obteniendo partido:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Función auxiliar para actualizar estadísticas de equipos
+const actualizarEstadisticasEquipos = async (evento, partido) => {
+  const { equipoLocal, equipoVisitante, golesLocal, golesVisitante } = partido;
+  
+  // Encontrar equipos
+  const equipoLocalData = evento.datosEspecificos.liga.equipos.find(e => e.nombre === equipoLocal);
+  const equipoVisitanteData = evento.datosEspecificos.liga.equipos.find(e => e.nombre === equipoVisitante);
+
+  if (!equipoLocalData || !equipoVisitanteData) return;
+
+  // Actualizar partidos jugados
+  equipoLocalData.partidosJugados += 1;
+  equipoVisitanteData.partidosJugados += 1;
+
+  // Actualizar goles
+  equipoLocalData.golesFavor += golesLocal;
+  equipoLocalData.golesContra += golesVisitante;
+  equipoVisitanteData.golesFavor += golesVisitante;
+  equipoVisitanteData.golesContra += golesLocal;
+
+  // Actualizar diferencia de goles
+  equipoLocalData.diferenciaGoles = equipoLocalData.golesFavor - equipoLocalData.golesContra;
+  equipoVisitanteData.diferenciaGoles = equipoVisitanteData.golesFavor - equipoVisitanteData.golesContra;
+
+  // Determinar ganador y actualizar puntos
+  if (golesLocal > golesVisitante) {
+    // Local gana
+    equipoLocalData.partidosGanados += 1;
+    equipoLocalData.puntos += 3;
+    equipoVisitanteData.partidosPerdidos += 1;
+  } else if (golesVisitante > golesLocal) {
+    // Visitante gana
+    equipoVisitanteData.partidosGanados += 1;
+    equipoVisitanteData.puntos += 3;
+    equipoLocalData.partidosPerdidos += 1;
+  } else {
+    // Empate
+    equipoLocalData.partidosEmpatados += 1;
+    equipoLocalData.puntos += 1;
+    equipoVisitanteData.partidosEmpatados += 1;
+    equipoVisitanteData.puntos += 1;
+  }
+};
+
+module.exports = {
+  obtenerEventos,
+  obtenerEvento,
+  crearEvento,
+  actualizarEvento,
+  eliminarEvento,
+  obtenerTiposEventos,
+  obtenerEventosDestacados,
+  inscribirUsuario,
+  obtenerEstadisticasLiga,
+  obtenerEstadisticasCampeonato,
+  obtenerFixtureCampeonato,
+  obtenerTablaCampeonato,
+  obtenerEstadisticasParticipacion,
+  // Nuevos controladores
+  actualizarEquiposLiga,
+  actualizarFixtureLiga,
+  actualizarResultadoPartido,
+  actualizarEstadisticasPartido,
+  actualizarPremiosLiga,
+  obtenerPartidoDetalle
+};
