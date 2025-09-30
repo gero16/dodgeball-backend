@@ -577,14 +577,13 @@ const actualizarFixtureLiga = async (req, res) => {
     }
     if (!evento.datosEspecificos.liga) {
       evento.datosEspecificos.liga = {};
-    }
-
     // Actualizar partidos
     evento.datosEspecificos.liga.partidos = partidos;
     
     // Recalcular tabla de posiciones después de actualizar partidos
     await recalcularTablaPosiciones(evento, partidos);
-    
+
+    evento.datosEspecificos.liga.partidos = partidos;
     await evento.save();
 
     res.json({

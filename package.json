@@ -10,7 +10,13 @@
     "test-mongodb": "node scripts/test-mongodb.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["dodgeball", "api", "express", "mongodb", "jwt"],
+  "keywords": [
+    "dodgeball",
+    "api",
+    "express",
+    "mongodb",
+    "jwt"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -30,6 +36,7 @@
     "socket.io": "^4.7.4"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^10.2.1",
     "nodemon": "^3.0.2"
   },
   "engines": {
