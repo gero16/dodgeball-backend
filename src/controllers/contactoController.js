@@ -39,21 +39,31 @@ const enviarMensaje = async (req, res) => {
     const transporter = createTransporter();
     if (transporter) {
       try {
+        // EMAIL_USER: tu correo que envía (ej: tu_correo@gmail.com)
+        // EMAIL_RECIPIENT: correo del cliente que recibe (ej: dodgeballuruguay@gmail.com)
+        const emailDestinatario = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+        
         await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: process.env.EMAIL_ADMIN || process.env.EMAIL_USER, // Email del administrador
+          from: process.env.EMAIL_USER, // Tu correo (el que envía)
+          to: emailDestinatario, // Correo del cliente (el que recibe)
+          replyTo: email, // Email del usuario que escribió el mensaje
           subject: `Nuevo mensaje de contacto: ${asunto}`,
           html: `
-            <h3>Nuevo mensaje de contacto</h3>
+            <h3>Nuevo mensaje de contacto desde la web</h3>
             <p><strong>Nombre:</strong> ${nombre}</p>
-            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
             <p><strong>Teléfono:</strong> ${telefono || 'No proporcionado'}</p>
             <p><strong>Tipo:</strong> ${tipo}</p>
             <p><strong>Asunto:</strong> ${asunto}</p>
+            <hr>
             <p><strong>Mensaje:</strong></p>
-            <p>${mensaje}</p>
+            <p style="background: #f5f5f5; padding: 15px; border-radius: 5px;">${mensaje}</p>
+            <hr>
+            <p style="font-size: 12px; color: #666;">Para responder, simplemente responde a este email o escribe a: ${email}</p>
           `
         });
+        
+        console.log(`✅ Email enviado a ${emailDestinatario}`);
       } catch (emailError) {
         console.error('Error al enviar email:', emailError);
         // No fallar la operación si el email falla
