@@ -37,11 +37,17 @@ const enviarMensaje = async (req, res) => {
 
     // Enviar email de notificación (opcional)
     const transporter = createTransporter();
+    console.log('📧 Transporter creado:', !!transporter);
+    console.log('📧 EMAIL_USER:', process.env.EMAIL_USER ? 'Configurado' : 'No configurado');
+    console.log('📧 EMAIL_RECIPIENT:', process.env.EMAIL_RECIPIENT ? 'Configurado' : 'No configurado');
+    
     if (transporter) {
       try {
         // EMAIL_USER: tu correo que envía (ej: tu_correo@gmail.com)
         // EMAIL_RECIPIENT: correo del cliente que recibe (ej: dodgeballuruguay@gmail.com)
         const emailDestinatario = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+        
+        console.log(`📧 Intentando enviar email a: ${emailDestinatario}`);
         
         await transporter.sendMail({
           from: process.env.EMAIL_USER, // Tu correo (el que envía)
