@@ -187,8 +187,8 @@ const validateContacto = [
   
   body('mensaje')
     .trim()
-    .isLength({ min: 10, max: 2000 })
-    .withMessage('El mensaje debe tener entre 10 y 2000 caracteres'),
+    .isLength({ min: 5, max: 2000 })
+    .withMessage('El mensaje debe tener entre 5 y 2000 caracteres'),
   
   body('tipo')
     .optional()
