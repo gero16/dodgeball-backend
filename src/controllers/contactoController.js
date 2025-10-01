@@ -12,17 +12,16 @@ const createTransporter = () => {
   const useSSL = port === 465;
   
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: port,
-    secure: useSSL, // true para puerto 465, false para 587
+    service: 'gmail', // Usar servicio predefinido de Gmail
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Opciones adicionales para mejorar compatibilidad
-    tls: {
-      rejectUnauthorized: false
-    }
+    // Opciones adicionales
+    pool: true,
+    maxConnections: 1,
+    rateDelta: 20000,
+    rateLimit: 5
   });
 };
 
