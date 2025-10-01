@@ -18,6 +18,9 @@ const contactoRoutes = require('./routes/contactoRoutes');
 
 const app = express();
 
+// Confiar en proxies (necesario para Railway, Heroku, etc.)
+app.set('trust proxy', 1);
+
 // Middleware de seguridad
 app.use(helmet());
 
