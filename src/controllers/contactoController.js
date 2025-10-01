@@ -69,11 +69,19 @@ const enviarMensaje = async (req, res) => {
           `
         });
         
-        console.log(`✅ Email enviado a ${emailDestinatario}`);
+        console.log(`✅ Email enviado exitosamente a ${emailDestinatario}`);
       } catch (emailError) {
-        console.error('Error al enviar email:', emailError);
+        console.error('❌ Error al enviar email:', emailError.message);
+        console.error('❌ Stack completo:', emailError.stack);
+        console.error('❌ Detalles:', {
+          code: emailError.code,
+          command: emailError.command,
+          response: emailError.response
+        });
         // No fallar la operación si el email falla
       }
+    } else {
+      console.log('⚠️ Transporter no disponible - email no enviado');
     }
 
     res.status(201).json({
