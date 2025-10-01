@@ -41,7 +41,7 @@ const enviarMensaje = async (req, res) => {
       try {
         await transporter.sendMail({
           from: process.env.EMAIL_USER,
-          to: process.env.EMAIL_USER, // Email del administrador
+          to: process.env.EMAIL_ADMIN || process.env.EMAIL_USER, // Email del administrador
           subject: `Nuevo mensaje de contacto: ${asunto}`,
           html: `
             <h3>Nuevo mensaje de contacto</h3>
