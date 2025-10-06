@@ -4,7 +4,7 @@ const Jugador = require('../models/Jugador');
 // Crear nuevo equipo
 const crearEquipo = async (req, res) => {
   try {
-    const { nombre, tipo, pais, ciudad, logo, colorPrincipal, colorSecundario } = req.body;
+    const { nombre, tipo, pais, ciudad, logo, colorPrincipal, colorSecundario, descripcion, categoria, activo } = req.body;
 
     // Verificar que no existe un equipo con el mismo nombre
     const equipoExistente = await Equipo.findOne({ nombre });
@@ -22,7 +22,10 @@ const crearEquipo = async (req, res) => {
       ciudad,
       logo,
       colorPrincipal,
-      colorSecundario
+      colorSecundario,
+      descripcion,
+      categoria,
+      activo
     });
 
     await equipo.save();

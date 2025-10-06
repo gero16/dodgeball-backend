@@ -5,25 +5,27 @@ const Evento = require('../models/Evento');
 // Crear nuevo jugador
 const crearJugador = async (req, res) => {
   try {
-    const { usuario, nombre, apellido, fechaNacimiento, posicion, numeroCamiseta } = req.body;
+    const { usuario, nombre, apellido, fechaNacimiento, posicion, numeroCamiseta, email, telefono, equipo, estadisticasGenerales, estadisticasPorEquipo, activo } = req.body;
 
-    // Verificar que el usuario existe
-    const Usuario = require('../models/Usuario');
-    const usuarioExiste = await Usuario.findById(usuario);
-    if (!usuarioExiste) {
-      return res.status(404).json({
-        success: false,
-        message: 'Usuario no encontrado'
-      });
-    }
+    // Si se proporciona un usuario, verificar que existe
+    if (usuario) {
+      const Usuario = require('../models/Usuario');
+      const usuarioExiste = await Usuario.findById(usuario);
+      if (!usuarioExiste) {
+        return res.status(404).json({
+          success: false,
+          message: 'Usuario no encontrado'
+        });
+      }
 
-    // Verificar que no existe ya un jugador para este usuario
-    const jugadorExistente = await Jugador.findOne({ usuario });
-    if (jugadorExistente) {
-      return res.status(400).json({
-        success: false,
-        message: 'Ya existe un perfil de jugador para este usuario'
-      });
+      // Verificar que no existe ya un jugador para este usuario
+      const jugadorExistente = await Jugador.findOne({ usuario });
+      if (jugadorExistente) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe un perfil de jugador para este usuario'
+        });
+      }
     }
 
     const jugador = new Jugador({
@@ -32,7 +34,13 @@ const crearJugador = async (req, res) => {
       apellido,
       fechaNacimiento,
       posicion,
-      numeroCamiseta
+      numeroCamiseta,
+      email,
+      telefono,
+      equipo,
+      estadisticasGenerales,
+      estadisticasPorEquipo,
+      activo
     });
 
     await jugador.save();
