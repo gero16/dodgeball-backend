@@ -358,7 +358,7 @@ const obtenerEstadisticasEvento = async (req, res) => {
     const estadisticas = await Estadistica.find(filtros)
       .populate('jugador', 'nombre apellido numeroCamiseta posicion')
       .populate('equipo', 'nombre colorPrincipal colorSecundario')
-      .sort({ indicePoder: -1 })
+      .sort({ hits: -1, tirosTotales: -1 }) // Ordenar por hits reales, luego por tiros totales
       .skip(skip)
       .limit(parseInt(limite));
 
