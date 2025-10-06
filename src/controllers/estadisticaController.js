@@ -216,8 +216,14 @@ const actualizarEstadistica = async (req, res) => {
     delete datosActualizacion.fechaRegistro;
     // Mantener todos los campos de datos, porcentajes e índices tal como se proporcionan
 
-    // Usar findById + save para que se ejecute el middleware pre('save')
-    const estadistica = await Estadistica.findById(id);
+    // Usar findByIdAndUpdate directamente para evitar middleware
+    const estadistica = await Estadistica.findByIdAndUpdate(
+      id,
+      datosActualizacion,
+      { new: true, runValidators: true }
+    )
+    .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+    .populate('equipo', 'nombre colorPrincipal colorSecundario');
     
     if (!estadistica) {
       return res.status(404).json({
@@ -225,16 +231,6 @@ const actualizarEstadistica = async (req, res) => {
         message: 'Estadística no encontrada'
       });
     }
-
-    // Actualizar los campos
-    Object.assign(estadistica, datosActualizacion);
-    
-    // Guardar para que se ejecute el middleware
-    await estadistica.save();
-    
-    // Poblar los datos relacionados
-    await estadistica.populate('jugador', 'nombre apellido numeroCamiseta posicion');
-    await estadistica.populate('equipo', 'nombre colorPrincipal colorSecundario');
 
     res.json({
       success: true,
