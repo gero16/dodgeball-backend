@@ -214,7 +214,7 @@ const actualizarEstadistica = async (req, res) => {
     delete datosActualizacion._id;
     delete datosActualizacion.__v;
     delete datosActualizacion.fechaRegistro;
-    // NO eliminar los campos de índices para que se recalculen
+    // Mantener todos los campos de datos, porcentajes e índices tal como se proporcionan
 
     // Usar findById + save para que se ejecute el middleware pre('save')
     const estadistica = await Estadistica.findById(id);
