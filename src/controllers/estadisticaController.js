@@ -216,6 +216,9 @@ const actualizarEstadistica = async (req, res) => {
     delete datosActualizacion.fechaRegistro;
     // Mantener todos los campos de datos, porcentajes e índices tal como se proporcionan
 
+    // Debug: mostrar datos que se van a actualizar
+    console.log('🔍 Datos a actualizar:', datosActualizacion);
+    
     // Usar findByIdAndUpdate directamente para evitar middleware
     const estadistica = await Estadistica.findByIdAndUpdate(
       id,
@@ -224,6 +227,11 @@ const actualizarEstadistica = async (req, res) => {
     )
     .populate('jugador', 'nombre apellido numeroCamiseta posicion')
     .populate('equipo', 'nombre colorPrincipal colorSecundario');
+    
+    console.log('🔍 Estadística después de actualizar:', {
+      indicePoder: estadistica?.indicePoder,
+      porcentajeHits: estadistica?.porcentajeHits
+    });
     
     if (!estadistica) {
       return res.status(404).json({
