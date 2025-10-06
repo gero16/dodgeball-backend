@@ -103,6 +103,126 @@ const jugadoresACrear = [
       pisoLinea: 0,
       catchesRecibidos: 1
     }
+  },
+  {
+    nombre: 'Salvador',
+    apellido: 'Méndez',
+    email: 'salvador.mendez.estadisticas@email.com',
+    equipo: 'The Dodgeball Monkey',
+    estadisticas: {
+      setsJugados: 11,
+      tirosTotales: 28,
+      hits: 8,
+      quemados: 8,
+      asistencias: 1,
+      tirosRecibidos: 32,
+      hitsRecibidos: 8,
+      esquives: 7,
+      esquivesSinEsfuerzo: 17,
+      ponchado: 5,
+      catchesIntentados: 1,
+      catches: 1,
+      bloqueosIntentados: 4,
+      bloqueos: 4,
+      pisoLinea: 1,
+      catchesRecibidos: 0
+    }
+  },
+  {
+    nombre: 'Edewel',
+    apellido: 'Cremel',
+    email: 'edewel.cremel.estadisticas@email.com',
+    equipo: 'The Catchers',
+    estadisticas: {
+      setsJugados: 9,
+      tirosTotales: 34,
+      hits: 12,
+      quemados: 3,
+      asistencias: 2,
+      tirosRecibidos: 34,
+      hitsRecibidos: 10,
+      esquives: 7,
+      esquivesSinEsfuerzo: 16,
+      ponchado: 8,
+      catchesIntentados: 0,
+      catches: 0,
+      bloqueosIntentados: 5,
+      bloqueos: 5,
+      pisoLinea: 0,
+      catchesRecibidos: 1
+    }
+  },
+  {
+    nombre: 'Gerónimo',
+    apellido: 'Nicola',
+    email: 'geronimo.nicola.estadisticas@email.com',
+    equipo: 'The Dodgeball Monkey', // Usando equipo existente temporalmente
+    estadisticas: {
+      setsJugados: 11,
+      tirosTotales: 49,
+      hits: 16,
+      quemados: 9,
+      asistencias: 3,
+      tirosRecibidos: 15,
+      hitsRecibidos: 10,
+      esquives: 0,
+      esquivesSinEsfuerzo: 5,
+      ponchado: 8,
+      catchesIntentados: 1,
+      catches: 1,
+      bloqueosIntentados: 2,
+      bloqueos: 1,
+      pisoLinea: 0,
+      catchesRecibidos: 1
+    }
+  },
+  {
+    nombre: 'Agustín',
+    apellido: 'Giles',
+    email: 'agustin.giles.estadisticas@email.com',
+    equipo: 'Bumba',
+    estadisticas: {
+      setsJugados: 9,
+      tirosTotales: 35,
+      hits: 8,
+      quemados: 7,
+      asistencias: 1,
+      tirosRecibidos: 18,
+      hitsRecibidos: 7,
+      esquives: 3,
+      esquivesSinEsfuerzo: 8,
+      ponchado: 7,
+      catchesIntentados: 1,
+      catches: 1,
+      bloqueosIntentados: 1,
+      bloqueos: 1,
+      pisoLinea: 0,
+      catchesRecibidos: 0
+    }
+  },
+  {
+    nombre: 'Santiago',
+    apellido: 'Giles',
+    email: 'santiago.giles.estadisticas@email.com',
+    equipo: 'Bumba',
+    estadisticas: {
+      setsJugados: 9,
+      tirosTotales: 19,
+      hits: 8,
+      quemados: 8,
+      asistencias: 2,
+      tirosRecibidos: 14,
+      hitsRecibidos: 6,
+      esquives: 3,
+      esquivesSinEsfuerzo: 4,
+      ponchado: 5,
+      catchesIntentados: 0,
+      catches: 0,
+      bloqueosIntentados: 2,
+      bloqueos: 2,
+      pisoLinea: 0,
+      catchesRecibidos: 0
+    }
   }
 ];
 
