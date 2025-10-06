@@ -59,8 +59,8 @@ app.use(cors({
     // Permitir requests sin origin (como mobile apps o Postman)
     if (!origin) return callback(null, true);
     
-    // En desarrollo, ser más permisivo
-    if (process.env.NODE_ENV === 'development') {
+    // Siempre permitir localhost para desarrollo
+    if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
       return callback(null, true);
     }
     
