@@ -174,9 +174,13 @@ estadisticaSchema.index({ activo: 1 });
 
 // Middleware para actualizar fecha de actualización
 estadisticaSchema.pre('save', function(next) {
+  console.log('🔍 Middleware pre-save ejecutándose...');
+  console.log('   - indicePoder antes:', this.indicePoder);
+  
   // Actualizar fecha de actualización
   this.fechaActualizacion = new Date();
   
+  console.log('   - indicePoder después:', this.indicePoder);
   next();
 });
 
