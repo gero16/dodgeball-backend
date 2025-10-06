@@ -15,6 +15,9 @@ const productoRoutes = require('./routes/productoRoutes');
 const donacionRoutes = require('./routes/donacionRoutes');
 const horarioRoutes = require('./routes/horarioRoutes');
 const contactoRoutes = require('./routes/contactoRoutes');
+const jugadorRoutes = require('./routes/jugadorRoutes');
+const equipoRoutes = require('./routes/equipoRoutes');
+const partidoRoutes = require('./routes/partidoRoutes');
 
 const app = express();
 
@@ -89,6 +92,9 @@ app.use('/api/productos', productoRoutes);
 app.use('/api/donaciones', donacionRoutes);
 app.use('/api/horarios', horarioRoutes);
 app.use('/api/contacto', contactoRoutes);
+app.use('/api/jugadores', jugadorRoutes);
+app.use('/api/equipos', equipoRoutes);
+app.use('/api/partidos', partidoRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {
@@ -114,6 +120,9 @@ app.get('/', (req, res) => {
       donaciones: '/api/donaciones',
       horarios: '/api/horarios',
       contacto: '/api/contacto',
+      jugadores: '/api/jugadores',
+      equipos: '/api/equipos',
+      partidos: '/api/partidos',
       salud: '/api/health'
     }
   });
