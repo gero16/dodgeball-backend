@@ -1,20 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { migrarEstadisticas, verificarEstadoMigracion } = require('../controllers/migracionController');
-const { adminAuth } = require('../middleware/auth');
 
 /**
  * @route POST /api/migrar-estadisticas
- * @desc Ejecutar migración de estadísticas (solo admin)
- * @access Private (Admin)
+ * @desc Ejecutar migración de estadísticas
+ * @access Public
  */
-router.post('/migrar-estadisticas', adminAuth, migrarEstadisticas);
+router.post('/migrar-estadisticas', migrarEstadisticas);
 
 /**
  * @route GET /api/migrar-estadisticas/status
  * @desc Verificar estado de la migración
- * @access Private (Admin)
+ * @access Public
  */
-router.get('/migrar-estadisticas/status', adminAuth, verificarEstadoMigracion);
+router.get('/migrar-estadisticas/status', verificarEstadoMigracion);
 
 module.exports = router;

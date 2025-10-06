@@ -14,63 +14,38 @@
 - **Headers**: 
   ```
   Content-Type: application/json
-  Authorization: Bearer {JWT_TOKEN}
   ```
 - **Body**: `{}`
-- **Requisitos**: Usuario con rol `admin`
+- **Requisitos**: Ninguno (acceso público)
 
 #### **2. Verificar Estado de Migración**
 - **Método**: `GET`
 - **URL**: `https://dodgeball-backend-production.up.railway.app/api/migrar-estadisticas/status`
-- **Headers**: 
-  ```
-  Authorization: Bearer {JWT_TOKEN}
-  ```
-- **Requisitos**: Usuario con rol `admin`
+- **Headers**: Ninguno requerido
+- **Requisitos**: Ninguno (acceso público)
 
-## 🔐 Autenticación Requerida
+## 🔓 Acceso Público
 
-**IMPORTANTE**: Los endpoints de migración requieren:
-1. **Token JWT válido** en el header `Authorization: Bearer {token}`
-2. **Usuario con rol `admin`**
-
-### **Cómo obtener el token:**
-1. Iniciar sesión como administrador
-2. Usar el token devuelto en la respuesta de login
-3. Incluirlo en el header `Authorization: Bearer {token}`
+**IMPORTANTE**: Los endpoints de migración son de **acceso público** y no requieren autenticación.
 
 ## 📊 Ejemplo de Uso con Postman
 
-### **Paso 1: Obtener Token de Admin**
-```http
-POST https://dodgeball-backend-production.up.railway.app/api/usuario/login
-Content-Type: application/json
-
-{
-  "email": "admin@example.com",
-  "password": "tu_password"
-}
-```
-
-### **Paso 2: Verificar Estado Actual**
+### **Paso 1: Verificar Estado Actual**
 ```http
 GET https://dodgeball-backend-production.up.railway.app/api/migrar-estadisticas/status
-Authorization: Bearer {JWT_TOKEN}
 ```
 
-### **Paso 3: Ejecutar Migración**
+### **Paso 2: Ejecutar Migración**
 ```http
 POST https://dodgeball-backend-production.up.railway.app/api/migrar-estadisticas
-Authorization: Bearer {JWT_TOKEN}
 Content-Type: application/json
 
 {}
 ```
 
-### **Paso 4: Verificar Resultado**
+### **Paso 3: Verificar Resultado**
 ```http
 GET https://dodgeball-backend-production.up.railway.app/api/migrar-estadisticas/status
-Authorization: Bearer {JWT_TOKEN}
 ```
 
 ## 📈 Respuestas Esperadas
@@ -114,9 +89,9 @@ Authorization: Bearer {JWT_TOKEN}
 ## ⚠️ Consideraciones Importantes
 
 ### **Seguridad:**
-- Solo usuarios con rol `admin` pueden ejecutar la migración
-- El token JWT debe ser válido y no expirado
+- Los endpoints son de acceso público (sin autenticación)
 - La migración se puede ejecutar múltiples veces sin problemas
+- Considera agregar autenticación en el futuro para mayor seguridad
 
 ### **Performance:**
 - La migración puede tomar varios segundos dependiendo del número de jugadores
