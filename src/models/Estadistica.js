@@ -172,11 +172,8 @@ estadisticaSchema.index({ evento: 1, temporada: 1 });
 estadisticaSchema.index({ temporada: 1 });
 estadisticaSchema.index({ activo: 1 });
 
-// Middleware para calcular porcentajes e índices antes de guardar
+// Middleware para actualizar fecha de actualización
 estadisticaSchema.pre('save', function(next) {
-  // Los porcentajes e índices se almacenan tal como se proporcionan
-  // No se calculan automáticamente
-  
   // Actualizar fecha de actualización
   this.fechaActualizacion = new Date();
   
