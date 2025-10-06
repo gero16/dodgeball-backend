@@ -229,19 +229,12 @@ const actualizarEstadistica = async (req, res) => {
     // Actualizar los campos
     Object.assign(estadistica, datosActualizacion);
     
-    // Guardar para que se ejecute el middleware y se recalculen los índices
+    // Guardar para que se ejecute el middleware
     await estadistica.save();
     
     // Poblar los datos relacionados
     await estadistica.populate('jugador', 'nombre apellido numeroCamiseta posicion');
     await estadistica.populate('equipo', 'nombre colorPrincipal colorSecundario');
-
-    if (!estadistica) {
-      return res.status(404).json({
-        success: false,
-        message: 'Estadística no encontrada'
-      });
-    }
 
     res.json({
       success: true,
