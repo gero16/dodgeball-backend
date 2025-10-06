@@ -8,10 +8,10 @@ const {
   obtenerRankingJugadores,
   obtenerReporteJugador
 } = require('../controllers/partidoController');
-const { validarToken } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Todas las rutas requieren autenticación
-router.use(validarToken);
+router.use(auth);
 
 /**
  * @route POST /api/partidos
