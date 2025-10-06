@@ -214,21 +214,27 @@ const actualizarEstadistica = async (req, res) => {
     delete datosActualizacion._id;
     delete datosActualizacion.__v;
     delete datosActualizacion.fechaRegistro;
-    delete datosActualizacion.porcentajeHits;
-    delete datosActualizacion.porcentajeOuts;
-    delete datosActualizacion.porcentajeCatches;
-    delete datosActualizacion.porcentajeBloqueos;
-    delete datosActualizacion.indiceAtaque;
-    delete datosActualizacion.indiceDefensa;
-    delete datosActualizacion.indicePoder;
+    // NO eliminar los campos de índices para que se recalculen
 
-    const estadistica = await Estadistica.findByIdAndUpdate(
-      id,
-      datosActualizacion,
-      { new: true, runValidators: true }
-    )
-    .populate('jugador', 'nombre apellido numeroCamiseta posicion')
-    .populate('equipo', 'nombre colorPrincipal colorSecundario');
+    // Usar findById + save para que se ejecute el middleware pre('save')
+    const estadistica = await Estadistica.findById(id);
+    
+    if (!estadistica) {
+      return res.status(404).json({
+        success: false,
+        message: 'Estadística no encontrada'
+      });
+    }
+
+    // Actualizar los campos
+    Object.assign(estadistica, datosActualizacion);
+    
+    // Guardar para que se ejecute el middleware y se recalculen los índices
+    await estadistica.save();
+    
+    // Poblar los datos relacionados
+    await estadistica.populate('jugador', 'nombre apellido numeroCamiseta posicion');
+    await estadistica.populate('equipo', 'nombre colorPrincipal colorSecundario');
 
     if (!estadistica) {
       return res.status(404).json({
