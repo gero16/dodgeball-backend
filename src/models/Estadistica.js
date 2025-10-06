@@ -187,10 +187,22 @@ estadisticaSchema.pre('save', function(next) {
   this.porcentajeBloqueos = this.bloqueosIntentados > 0 ? 
     Math.round((this.bloqueos / this.bloqueosIntentados) * 100 * 100) / 100 : 0;
   
-  // Calcular índices
-  this.indiceAtaque = this.hits + this.quemados + this.asistencias;
-  this.indiceDefensa = this.esquives + this.catches + this.bloqueos;
-  this.indicePoder = this.indiceAtaque + this.indiceDefensa;
+  // Calcular índices usando las fórmulas correctas
+  
+  // Índice de Ataque (Offensive Power Index)
+  const accionesOfensivas = (0.5 * this.hits) + (1 * this.quemados) + (0.75 * this.asistencias) - (0.5 * this.catchesRecibidos);
+  const eficienciaOfensiva = this.tirosTotales > 0 ? accionesOfensivas / this.tirosTotales : 0;
+  this.indiceAtaque = (accionesOfensivas / Math.sqrt(this.setsJugados)) + (0.5 * eficienciaOfensiva);
+  
+  // Índice de Defensa (Defensive Power Index)
+  const accionesDefensivas = (0.75 * this.bloqueos) + (2.75 * 2 * this.catches) + (0.75 * this.esquives) + (0.1 * this.esquivesSinEsfuerzo);
+  const impactoNegativo = this.hitsRecibidos - this.catches - this.bloqueos;
+  const defensaNeta = accionesDefensivas - impactoNegativo;
+  const bonusExposicion = 0.2 * Math.sqrt(this.tirosRecibidos);
+  this.indiceDefensa = (defensaNeta / Math.sqrt(this.setsJugados)) + bonusExposicion;
+  
+  // Índice de Poder Total
+  this.indicePoder = (0.6 * this.indiceAtaque) + (0.4 * this.indiceDefensa);
   
   // Actualizar fecha de actualización
   this.fechaActualizacion = new Date();
