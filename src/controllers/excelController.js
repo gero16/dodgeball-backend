@@ -25,6 +25,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   fileFilter: function (req, file, cb) {
+    console.log('📁 Archivo recibido:', file.fieldname, file.originalname);
     const allowedTypes = ['.xlsx', '.xls'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedTypes.includes(ext)) {
@@ -43,17 +44,23 @@ const upload = multer({
  */
 const procesarArchivoExcel = async (req, res) => {
   try {
-    if (!req.file) {
+    console.log('🔍 Debug - req.files:', req.files);
+    console.log('🔍 Debug - req.file:', req.file);
+    
+    // Manejar req.files.excelFile[0] o req.file
+    const file = req.file || (req.files && req.files.excelFile && req.files.excelFile[0]);
+    
+    if (!file) {
       return res.status(400).json({
         success: false,
         message: 'No se proporcionó ningún archivo'
       });
     }
 
-    console.log('📊 Procesando archivo Excel:', req.file.filename);
+    console.log('📊 Procesando archivo Excel:', file.filename);
 
     // Leer el archivo Excel
-    const workbook = XLSX.readFile(req.file.path);
+    const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet);
@@ -208,7 +215,7 @@ const procesarArchivoExcel = async (req, res) => {
     }
 
     // Limpiar archivo temporal
-    fs.unlinkSync(req.file.path);
+    fs.unlinkSync(file.path);
 
     console.log('\n📈 Resumen del procesamiento:');
     console.log(`✅ Jugadores creados: ${resultados.jugadoresCreados}`);
@@ -225,8 +232,9 @@ const procesarArchivoExcel = async (req, res) => {
     console.error('❌ Error procesando archivo Excel:', error);
     
     // Limpiar archivo temporal si existe
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    const file = req.file || (req.files && req.files.excelFile && req.files.excelFile[0]);
+    if (file && fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
     }
 
     res.status(500).json({
