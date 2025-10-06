@@ -1,4 +1,5 @@
 const Evento = require('../models/Evento');
+const Estadistica = require('../models/Estadistica');
 
 // Obtener todos los eventos
 const obtenerEventos = async (req, res) => {
@@ -69,6 +70,7 @@ const obtenerEventos = async (req, res) => {
 const obtenerEvento = async (req, res) => {
   try {
     const { id } = req.params;
+    const { incluirEstadisticas = false } = req.query;
     
     const evento = await Evento.findById(id).populate('organizador', 'nombre email');
     
@@ -77,6 +79,48 @@ const obtenerEvento = async (req, res) => {
         success: false,
         message: 'Evento no encontrado'
       });
+    }
+
+    // Si se solicita incluir estadísticas y es un evento de liga
+    if (incluirEstadisticas === 'true' && evento.tipo === 'liga') {
+      try {
+        // Obtener estadísticas de jugadores para este evento
+        const estadisticas = await Estadistica.find({ 
+          evento: id, 
+          activo: true 
+        })
+        .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+        .populate('equipo', 'nombre colorPrincipal colorSecundario')
+        .sort({ indicePoder: -1 });
+
+        // Agrupar estadísticas por equipo
+        const estadisticasPorEquipo = {};
+        estadisticas.forEach(estadistica => {
+          const equipoId = estadistica.equipo._id.toString();
+          if (!estadisticasPorEquipo[equipoId]) {
+            estadisticasPorEquipo[equipoId] = {
+              equipo: estadistica.equipo,
+              jugadores: []
+            };
+          }
+          estadisticasPorEquipo[equipoId].jugadores.push(estadistica);
+        });
+
+        // Agregar estadísticas al evento
+        evento.datosEspecificos = evento.datosEspecificos || {};
+        evento.datosEspecificos.estadisticasJugadores = {
+          totalJugadores: estadisticas.length,
+          rankingGeneral: estadisticas.slice(0, 10), // Top 10
+          porEquipo: Object.values(estadisticasPorEquipo)
+        };
+      } catch (error) {
+        console.error('Error obteniendo estadísticas:', error);
+        // Si hay error obteniendo estadísticas, continuar sin ellas
+        evento.datosEspecificos = evento.datosEspecificos || {};
+        evento.datosEspecificos.estadisticasJugadores = {
+          error: 'No se pudieron cargar las estadísticas'
+        };
+      }
     }
 
     res.json({
@@ -278,6 +322,100 @@ const obtenerTiposEventos = async (req, res) => {
     });
   } catch (error) {
     console.error('Error al obtener tipos de eventos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener estadísticas de jugadores de un evento
+const obtenerEstadisticasEvento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { equipo, limite = 50, pagina = 1 } = req.query;
+    
+    // Verificar que el evento existe
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    // Construir filtros
+    const filtros = { 
+      evento: id, 
+      activo: true 
+    };
+    
+    if (equipo) filtros.equipo = equipo;
+
+    const skip = (pagina - 1) * limite;
+
+    // Obtener estadísticas
+    const estadisticas = await Estadistica.find(filtros)
+      .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+      .populate('equipo', 'nombre colorPrincipal colorSecundario')
+      .sort({ indicePoder: -1 })
+      .skip(skip)
+      .limit(parseInt(limite));
+
+    const total = await Estadistica.countDocuments(filtros);
+
+    // Agrupar por equipo para estadísticas adicionales
+    const estadisticasPorEquipo = {};
+    estadisticas.forEach(estadistica => {
+      const equipoId = estadistica.equipo._id.toString();
+      if (!estadisticasPorEquipo[equipoId]) {
+        estadisticasPorEquipo[equipoId] = {
+          equipo: estadistica.equipo,
+          jugadores: [],
+          totalJugadores: 0,
+          promedioPoder: 0,
+          totalHits: 0,
+          totalTiros: 0
+        };
+      }
+      estadisticasPorEquipo[equipoId].jugadores.push(estadistica);
+      estadisticasPorEquipo[equipoId].totalJugadores++;
+      estadisticasPorEquipo[equipoId].totalHits += estadistica.hits;
+      estadisticasPorEquipo[equipoId].totalTiros += estadistica.tirosTotales;
+    });
+
+    // Calcular promedios
+    Object.values(estadisticasPorEquipo).forEach(equipo => {
+      if (equipo.totalJugadores > 0) {
+        equipo.promedioPoder = equipo.jugadores.reduce((sum, j) => sum + j.indicePoder, 0) / equipo.totalJugadores;
+        equipo.promedioHits = equipo.totalHits / equipo.totalJugadores;
+        equipo.promedioTiros = equipo.totalTiros / equipo.totalJugadores;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        evento: {
+          _id: evento._id,
+          titulo: evento.titulo,
+          tipo: evento.tipo
+        },
+        estadisticas: {
+          totalJugadores: total,
+          rankingGeneral: estadisticas,
+          porEquipo: Object.values(estadisticasPorEquipo),
+          paginacion: {
+            pagina: parseInt(pagina),
+            limite: parseInt(limite),
+            total,
+            paginas: Math.ceil(total / limite)
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas del evento:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -885,5 +1023,6 @@ module.exports = {
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
   actualizarPremiosLiga,
-  obtenerPartidoDetalle
+  obtenerPartidoDetalle,
+  obtenerEstadisticasEvento
 };

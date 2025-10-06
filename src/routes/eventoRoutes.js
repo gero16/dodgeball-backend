@@ -20,7 +20,8 @@ const {
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
   actualizarPremiosLiga,
-  obtenerPartidoDetalle
+  obtenerPartidoDetalle,
+  obtenerEstadisticasEvento
 } = require('../controllers/eventoController');
 
 const { auth } = require('../middleware/auth');
@@ -36,6 +37,7 @@ router.get('/:id', obtenerEvento);
 router.get('/:id/estadisticas/liga', obtenerEstadisticasLiga);
 router.get('/:id/estadisticas/campeonato', obtenerEstadisticasCampeonato);
 router.get('/:id/estadisticas/participacion', obtenerEstadisticasParticipacion);
+router.get('/:id/estadisticas/jugadores', obtenerEstadisticasEvento);
 
 // Rutas específicas de campeonatos
 router.get('/:id/fixture', obtenerFixtureCampeonato);
