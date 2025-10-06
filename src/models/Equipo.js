@@ -81,7 +81,7 @@ const equipoSchema = new mongoose.Schema({
 });
 
 // Índices
-equipoSchema.index({ nombre: 1 });
+// nombre ya tiene índice único por la propiedad unique: true
 equipoSchema.index({ tipo: 1 });
 equipoSchema.index({ activo: 1 });
 equipoSchema.index({ 'jugadores.jugador': 1 });
