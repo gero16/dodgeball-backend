@@ -19,6 +19,7 @@ const jugadorRoutes = require('./routes/jugadorRoutes');
 const equipoRoutes = require('./routes/equipoRoutes');
 const partidoRoutes = require('./routes/partidoRoutes');
 const migracionRoutes = require('./routes/migracionRoutes');
+const excelRoutes = require('./routes/excelRoutes');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use('/api/jugadores', jugadorRoutes);
 app.use('/api/equipos', equipoRoutes);
 app.use('/api/partidos', partidoRoutes);
 app.use('/api', migracionRoutes);
+app.use('/api/excel', excelRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {
@@ -126,6 +128,7 @@ app.get('/', (req, res) => {
       equipos: '/api/equipos',
       partidos: '/api/partidos',
       migracion: '/api/migrar-estadisticas',
+      excel: '/api/excel',
       salud: '/api/health'
     }
   });
