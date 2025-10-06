@@ -66,6 +66,14 @@ const procesarArchivoExcel = async (req, res) => {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     console.log(`📋 Encontradas ${data.length} filas en el archivo`);
+    
+    // Debug: Mostrar las primeras filas para diagnosticar
+    console.log('🔍 Debug - Primera fila del Excel:', data[0]);
+    console.log('🔍 Debug - Columnas disponibles:', Object.keys(data[0] || {}));
+    
+    if (data.length > 1) {
+      console.log('🔍 Debug - Segunda fila del Excel:', data[1]);
+    }
 
     if (data.length === 0) {
       return res.status(400).json({
@@ -91,18 +99,105 @@ const procesarArchivoExcel = async (req, res) => {
       detalles: []
     };
 
+    // Función para mapear columnas automáticamente
+    const mapearColumnas = (fila) => {
+      const columnas = Object.keys(fila);
+      const mapeo = {};
+      
+      // Buscar columnas que contengan palabras clave
+      columnas.forEach(col => {
+        const colLower = col.toLowerCase();
+        
+        // Mapear nombres
+        if (colLower.includes('nombre') && !colLower.includes('apellido')) {
+          mapeo.nombre = fila[col];
+        }
+        if (colLower.includes('apellido')) {
+          mapeo.apellido = fila[col];
+        }
+        if (colLower.includes('email') || colLower.includes('correo')) {
+          mapeo.email = fila[col];
+        }
+        if (colLower.includes('teléfono') || colLower.includes('telefono') || colLower.includes('tel')) {
+          mapeo.telefono = fila[col];
+        }
+        if (colLower.includes('fecha') && colLower.includes('nacimiento')) {
+          mapeo.fechaNacimiento = fila[col];
+        }
+        if (colLower.includes('posición') || colLower.includes('posicion')) {
+          mapeo.posicion = fila[col];
+        }
+        if (colLower.includes('número') && colLower.includes('camiseta')) {
+          mapeo.numeroCamiseta = fila[col];
+        }
+        if (colLower.includes('sets') && colLower.includes('jugados')) {
+          mapeo.setsJugados = fila[col];
+        }
+        if (colLower.includes('tiros') && colLower.includes('totales')) {
+          mapeo.tirosTotales = fila[col];
+        }
+        if (colLower.includes('hits') && !colLower.includes('recibidos')) {
+          mapeo.hits = fila[col];
+        }
+        if (colLower.includes('quemados')) {
+          mapeo.quemados = fila[col];
+        }
+        if (colLower.includes('asistencias')) {
+          mapeo.asistencias = fila[col];
+        }
+        if (colLower.includes('tiros') && colLower.includes('recibidos')) {
+          mapeo.tirosRecibidos = fila[col];
+        }
+        if (colLower.includes('hits') && colLower.includes('recibidos')) {
+          mapeo.hitsRecibidos = fila[col];
+        }
+        if (colLower.includes('esquives') && !colLower.includes('exitosos')) {
+          mapeo.esquives = fila[col];
+        }
+        if (colLower.includes('esquives') && colLower.includes('exitosos')) {
+          mapeo.esquivesExitosos = fila[col];
+        }
+        if (colLower.includes('ponchado')) {
+          mapeo.ponchado = fila[col];
+        }
+        if (colLower.includes('catches') && colLower.includes('intentos')) {
+          mapeo.catchesIntentos = fila[col];
+        }
+        if (colLower.includes('catches') && !colLower.includes('intentos') && !colLower.includes('recibidos')) {
+          mapeo.catches = fila[col];
+        }
+        if (colLower.includes('catches') && colLower.includes('recibidos')) {
+          mapeo.catchesRecibidos = fila[col];
+        }
+        if (colLower.includes('bloqueos') && colLower.includes('intentos')) {
+          mapeo.bloqueosIntentos = fila[col];
+        }
+        if (colLower.includes('bloqueos') && !colLower.includes('intentos')) {
+          mapeo.bloqueos = fila[col];
+        }
+        if (colLower.includes('piso') && colLower.includes('línea')) {
+          mapeo.pisoLinea = fila[col];
+        }
+      });
+      
+      return mapeo;
+    };
+
     // Procesar cada fila del Excel
     for (let i = 0; i < data.length; i++) {
       const fila = data[i];
+      const datosMapeados = mapearColumnas(fila);
+      
       try {
-        console.log(`👤 Procesando fila ${i + 1}: ${fila.Nombre || 'Sin nombre'}`);
+        console.log(`👤 Procesando fila ${i + 1}: ${datosMapeados.nombre || 'Sin nombre'}`);
+        console.log(`🔍 Datos mapeados:`, datosMapeados);
 
         // Validar datos requeridos
-        if (!fila.Nombre || !fila.Apellido) {
+        if (!datosMapeados.nombre || !datosMapeados.apellido) {
           resultados.errores++;
           resultados.detalles.push({
             fila: i + 1,
-            jugador: `${fila.Nombre || ''} ${fila.Apellido || ''}`,
+            jugador: `${datosMapeados.nombre || ''} ${datosMapeados.apellido || ''}`,
             estado: 'error',
             error: 'Faltan nombre o apellido'
           });
@@ -111,14 +206,14 @@ const procesarArchivoExcel = async (req, res) => {
 
         // Buscar o crear usuario
         let usuario = await Usuario.findOne({ 
-          email: fila.Email || `${fila.Nombre.toLowerCase()}.${fila.Apellido.toLowerCase()}@email.com` 
+          email: datosMapeados.email || `${datosMapeados.nombre.toLowerCase()}.${datosMapeados.apellido.toLowerCase()}@email.com` 
         });
 
         if (!usuario) {
           usuario = new Usuario({
-            nombre: fila.Nombre,
-            apellido: fila.Apellido,
-            email: fila.Email || `${fila.Nombre.toLowerCase()}.${fila.Apellido.toLowerCase()}@email.com`,
+            nombre: datosMapeados.nombre,
+            apellido: datosMapeados.apellido,
+            email: datosMapeados.email || `${datosMapeados.nombre.toLowerCase()}.${datosMapeados.apellido.toLowerCase()}@email.com`,
             password: '123456', // Password por defecto
             rol: 'jugador'
           });
@@ -128,24 +223,24 @@ const procesarArchivoExcel = async (req, res) => {
         // Buscar jugador existente
         let jugador = await Jugador.findOne({ usuario: usuario._id });
 
-        // Preparar estadísticas
+        // Preparar estadísticas usando datos mapeados
         const estadisticasGenerales = {
-          setsJugados: parseInt(fila['Sets Jugados']) || 0,
-          tirosTotales: parseInt(fila['Tiros Totales']) || 0,
-          hits: parseInt(fila['Hits']) || 0,
-          quemados: parseInt(fila['Quemados']) || 0,
-          asistencias: parseInt(fila['Asistencias']) || 0,
-          tirosRecibidos: parseInt(fila['Tiros Recibidos']) || 0,
-          hitsRecibidos: parseInt(fila['Hits Recibidos']) || 0,
-          esquives: parseInt(fila['Esquives']) || 0,
-          esquivesExitosos: parseInt(fila['Esquives Exitosos']) || 0,
-          ponchado: parseInt(fila['Ponchado']) || 0,
-          catchesIntentos: parseInt(fila['Catches Intentos']) || 0,
-          catches: parseInt(fila['Catches']) || 0,
-          catchesRecibidos: parseInt(fila['Catches Recibidos']) || 0,
-          bloqueosIntentos: parseInt(fila['Bloqueos Intentos']) || 0,
-          bloqueos: parseInt(fila['Bloqueos']) || 0,
-          pisoLinea: parseInt(fila['Piso Línea']) || 0
+          setsJugados: parseInt(datosMapeados.setsJugados) || 0,
+          tirosTotales: parseInt(datosMapeados.tirosTotales) || 0,
+          hits: parseInt(datosMapeados.hits) || 0,
+          quemados: parseInt(datosMapeados.quemados) || 0,
+          asistencias: parseInt(datosMapeados.asistencias) || 0,
+          tirosRecibidos: parseInt(datosMapeados.tirosRecibidos) || 0,
+          hitsRecibidos: parseInt(datosMapeados.hitsRecibidos) || 0,
+          esquives: parseInt(datosMapeados.esquives) || 0,
+          esquivesExitosos: parseInt(datosMapeados.esquivesExitosos) || 0,
+          ponchado: parseInt(datosMapeados.ponchado) || 0,
+          catchesIntentos: parseInt(datosMapeados.catchesIntentos) || 0,
+          catches: parseInt(datosMapeados.catches) || 0,
+          catchesRecibidos: parseInt(datosMapeados.catchesRecibidos) || 0,
+          bloqueosIntentos: parseInt(datosMapeados.bloqueosIntentos) || 0,
+          bloqueos: parseInt(datosMapeados.bloqueos) || 0,
+          pisoLinea: parseInt(datosMapeados.pisoLinea) || 0
         };
 
         // Calcular porcentajes e índices
@@ -158,7 +253,7 @@ const procesarArchivoExcel = async (req, res) => {
           resultados.jugadoresActualizados++;
           resultados.detalles.push({
             fila: i + 1,
-            jugador: `${fila.Nombre} ${fila.Apellido}`,
+            jugador: `${datosMapeados.nombre} ${datosMapeados.apellido}`,
             estado: 'actualizado',
             estadisticas: {
               indicePoder: estadisticasCompletas.indicePoder,
@@ -173,13 +268,13 @@ const procesarArchivoExcel = async (req, res) => {
 
           jugador = new Jugador({
             usuario: usuario._id,
-            nombre: fila.Nombre,
-            apellido: fila.Apellido,
-            fechaNacimiento: fila['Fecha Nacimiento'] ? new Date(fila['Fecha Nacimiento']) : null,
-            posicion: fila.Posicion || 'versatil',
-            numeroCamiseta: parseInt(fila['Número Camiseta']) || (i + 1),
-            email: fila.Email,
-            telefono: fila.Teléfono,
+            nombre: datosMapeados.nombre,
+            apellido: datosMapeados.apellido,
+            fechaNacimiento: datosMapeados.fechaNacimiento ? new Date(datosMapeados.fechaNacimiento) : null,
+            posicion: datosMapeados.posicion || 'versatil',
+            numeroCamiseta: parseInt(datosMapeados.numeroCamiseta) || (i + 1),
+            email: datosMapeados.email,
+            telefono: datosMapeados.telefono,
             equipo: equipo._id,
             estadisticasGenerales: estadisticasCompletas,
             activo: true
@@ -189,7 +284,7 @@ const procesarArchivoExcel = async (req, res) => {
           resultados.jugadoresCreados++;
           resultados.detalles.push({
             fila: i + 1,
-            jugador: `${fila.Nombre} ${fila.Apellido}`,
+            jugador: `${datosMapeados.nombre} ${datosMapeados.apellido}`,
             estado: 'creado',
             equipo: equipo.nombre,
             estadisticas: {
@@ -200,7 +295,7 @@ const procesarArchivoExcel = async (req, res) => {
           });
         }
 
-        console.log(`✅ ${fila.Nombre} ${fila.Apellido} procesado correctamente`);
+        console.log(`✅ ${datosMapeados.nombre} ${datosMapeados.apellido} procesado correctamente`);
 
       } catch (error) {
         console.error(`❌ Error procesando fila ${i + 1}:`, error.message);
