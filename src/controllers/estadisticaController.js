@@ -1,6 +1,7 @@
 const Estadistica = require('../models/Estadistica');
 const Jugador = require('../models/Jugador');
 const Equipo = require('../models/Equipo');
+const Evento = require('../models/Evento');
 
 /**
  * Crear nueva estadística
@@ -10,6 +11,7 @@ const crearEstadistica = async (req, res) => {
     const {
       equipo,
       jugador,
+      evento,
       setsJugados,
       tirosTotales,
       hits,
@@ -47,23 +49,34 @@ const crearEstadistica = async (req, res) => {
       });
     }
 
-    // Verificar si ya existe una estadística para este jugador y equipo en esta temporada
+    // Validar que el evento existe
+    const eventoExiste = await Evento.findById(evento);
+    if (!eventoExiste) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    // Verificar si ya existe una estadística para este jugador, equipo y evento
     const estadisticaExistente = await Estadistica.findOne({
       equipo,
       jugador,
+      evento,
       temporada: temporada || '2024-2025'
     });
 
     if (estadisticaExistente) {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe una estadística para este jugador en este equipo para esta temporada'
+        message: 'Ya existe una estadística para este jugador en este equipo para este evento'
       });
     }
 
     const estadistica = new Estadistica({
       equipo,
       jugador,
+      evento,
       setsJugados: setsJugados || 0,
       tirosTotales: tirosTotales || 0,
       hits: hits || 0,
@@ -88,6 +101,7 @@ const crearEstadistica = async (req, res) => {
     // Poblar los datos relacionados
     await estadistica.populate('jugador', 'nombre apellido numeroCamiseta posicion');
     await estadistica.populate('equipo', 'nombre colorPrincipal colorSecundario');
+    await estadistica.populate('evento', 'titulo');
 
     res.status(201).json({
       success: true,
@@ -110,12 +124,14 @@ const crearEstadistica = async (req, res) => {
  */
 const obtenerEstadisticas = async (req, res) => {
   try {
-    const { temporada = '2024-2025', equipo, jugador, limite = 50, pagina = 1 } = req.query;
+    const { temporada = '2024-2025', equipo, jugador, evento, limite = 50, pagina = 1 } = req.query;
     
     const filtros = { 
       activo: true,
       temporada 
     };
+    
+    if (evento) filtros.evento = evento;
 
     if (equipo) filtros.equipo = equipo;
     if (jugador) filtros.jugador = jugador;
@@ -125,6 +141,7 @@ const obtenerEstadisticas = async (req, res) => {
     const estadisticas = await Estadistica.find(filtros)
       .populate('jugador', 'nombre apellido numeroCamiseta posicion')
       .populate('equipo', 'nombre colorPrincipal colorSecundario')
+      .populate('evento', 'titulo')
       .sort({ indicePoder: -1 })
       .skip(skip)
       .limit(parseInt(limite));

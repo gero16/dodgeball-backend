@@ -11,6 +11,11 @@ const estadisticaSchema = new mongoose.Schema({
     ref: 'Jugador',
     required: [true, 'El jugador es obligatorio']
   },
+  evento: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Evento',
+    required: [true, 'El evento es obligatorio']
+  },
   
   // Estadísticas básicas
   setsJugados: {
@@ -162,7 +167,8 @@ const estadisticaSchema = new mongoose.Schema({
 });
 
 // Índices para optimizar consultas
-estadisticaSchema.index({ equipo: 1, jugador: 1 });
+estadisticaSchema.index({ equipo: 1, jugador: 1, evento: 1 });
+estadisticaSchema.index({ evento: 1, temporada: 1 });
 estadisticaSchema.index({ temporada: 1 });
 estadisticaSchema.index({ activo: 1 });
 
@@ -206,34 +212,55 @@ estadisticaSchema.virtual('equipoNombre').get(function() {
     'Equipo no encontrado';
 });
 
+// Virtual para obtener el nombre del evento
+estadisticaSchema.virtual('eventoNombre').get(function() {
+  return this.populated('evento') ? 
+    this.evento.titulo : 
+    'Evento no encontrado';
+});
+
 // Método estático para obtener estadísticas por equipo
-estadisticaSchema.statics.porEquipo = function(equipoId, temporada = '2024-2025') {
-  return this.find({ 
+estadisticaSchema.statics.porEquipo = function(equipoId, eventoId = null, temporada = '2024-2025') {
+  const filtros = { 
     equipo: equipoId, 
     temporada: temporada, 
     activo: true 
-  }).populate('jugador', 'nombre apellido numeroCamiseta posicion');
+  };
+  if (eventoId) filtros.evento = eventoId;
+  
+  return this.find(filtros)
+    .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+    .populate('evento', 'titulo');
 };
 
 // Método estático para obtener estadísticas por jugador
-estadisticaSchema.statics.porJugador = function(jugadorId, temporada = '2024-2025') {
-  return this.find({ 
+estadisticaSchema.statics.porJugador = function(jugadorId, eventoId = null, temporada = '2024-2025') {
+  const filtros = { 
     jugador: jugadorId, 
     temporada: temporada, 
     activo: true 
-  }).populate('equipo', 'nombre colorPrincipal colorSecundario');
+  };
+  if (eventoId) filtros.evento = eventoId;
+  
+  return this.find(filtros)
+    .populate('equipo', 'nombre colorPrincipal colorSecundario')
+    .populate('evento', 'titulo');
 };
 
 // Método estático para obtener ranking de jugadores
-estadisticaSchema.statics.ranking = function(criterio = 'indicePoder', temporada = '2024-2025', limite = 10) {
-  return this.find({ 
+estadisticaSchema.statics.ranking = function(criterio = 'indicePoder', eventoId = null, temporada = '2024-2025', limite = 10) {
+  const filtros = { 
     temporada: temporada, 
     activo: true 
-  })
-  .populate('jugador', 'nombre apellido numeroCamiseta posicion')
-  .populate('equipo', 'nombre')
-  .sort({ [criterio]: -1 })
-  .limit(limite);
+  };
+  if (eventoId) filtros.evento = eventoId;
+  
+  return this.find(filtros)
+    .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+    .populate('equipo', 'nombre')
+    .populate('evento', 'titulo')
+    .sort({ [criterio]: -1 })
+    .limit(limite);
 };
 
 module.exports = mongoose.model('Estadistica', estadisticaSchema);
