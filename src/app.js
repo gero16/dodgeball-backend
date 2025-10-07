@@ -48,6 +48,7 @@ app.use(limiter);
 // Configuración de CORS para permitir múltiples orígenes
 const allowedOrigins = [
   'http://localhost:5173',    // Vite dev server
+  'http://localhost:5174',    // Vite dev server (puerto alternativo)
   'http://localhost:3000',    // React dev server
   'http://localhost:8080',    // Otro puerto común
   'https://dodgeball-kappa.vercel.app',  // Tu dominio de producción en Vercel

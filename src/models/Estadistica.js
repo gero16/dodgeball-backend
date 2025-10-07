@@ -128,18 +128,15 @@ const estadisticaSchema = new mongoose.Schema({
   // Índices calculados
   indiceAtaque: {
     type: Number,
-    default: 0,
-    min: [0, 'El índice de ataque no puede ser negativo']
+    default: 0
   },
   indiceDefensa: {
     type: Number,
-    default: 0,
-    min: [0, 'El índice de defensa no puede ser negativo']
+    default: 0
   },
   indicePoder: {
     type: Number,
-    default: 0,
-    min: [0, 'El índice de poder no puede ser negativo']
+    default: 0
   },
   
   // Metadatos
