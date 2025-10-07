@@ -213,10 +213,8 @@ jugadorSchema.pre('save', function(next) {
     stats.porcentajeOuts = (stats.ponchado / stats.tirosRecibidos) * 100;
   }
   
-  // Calcular índices de rendimiento
-  stats.indiceAtaque = this.calcularIndiceAtaque(stats);
-  stats.indiceDefensa = this.calcularIndiceDefensa(stats);
-  stats.indicePoder = stats.indiceAtaque + stats.indiceDefensa;
+  // Los índices se deben pasar exactamente como se calculan externamente
+  // No se deben recalcular automáticamente para mantener la precisión
   
   next();
 });

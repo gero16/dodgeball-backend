@@ -134,10 +134,8 @@ partidoSchema.pre('save', function(next) {
       jugador.porcentajeOuts = (jugador.ponchado / jugador.tirosRecibidos) * 100;
     }
     
-    // Calcular índices (fórmulas basadas en el Excel)
-    jugador.indiceAtaque = this.calcularIndiceAtaque(jugador);
-    jugador.indiceDefensa = this.calcularIndiceDefensa(jugador);
-    jugador.indicePoder = jugador.indiceAtaque + jugador.indiceDefensa;
+    // Los índices se deben pasar exactamente como se calculan externamente
+    // No se deben recalcular automáticamente para mantener la precisión
   });
   
   next();
