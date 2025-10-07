@@ -186,23 +186,26 @@ estadisticaSchema.pre('save', function(next) {
 
 // Virtual para obtener el nombre completo del jugador
 estadisticaSchema.virtual('jugadorNombre').get(function() {
-  return this.populated('jugador') ? 
-    `${this.jugador.nombre} ${this.jugador.apellido}` : 
-    'Jugador no encontrado';
+  if (this.populated('jugador') && this.jugador && this.jugador.nombre && this.jugador.apellido) {
+    return `${this.jugador.nombre} ${this.jugador.apellido}`;
+  }
+  return 'Jugador no encontrado';
 });
 
 // Virtual para obtener el nombre del equipo
 estadisticaSchema.virtual('equipoNombre').get(function() {
-  return this.populated('equipo') ? 
-    this.equipo.nombre : 
-    'Equipo no encontrado';
+  if (this.populated('equipo') && this.equipo && this.equipo.nombre) {
+    return this.equipo.nombre;
+  }
+  return 'Equipo no encontrado';
 });
 
 // Virtual para obtener el nombre del evento
 estadisticaSchema.virtual('eventoNombre').get(function() {
-  return this.populated('evento') ? 
-    this.evento.titulo : 
-    'Evento no encontrado';
+  if (this.populated('evento') && this.evento && this.evento.titulo) {
+    return this.evento.titulo;
+  }
+  return 'Evento no encontrado';
 });
 
 // Método estático para obtener estadísticas por equipo
