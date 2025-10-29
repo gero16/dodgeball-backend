@@ -85,6 +85,11 @@ const eventoSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Usuario'
   },
+  dificultad: {
+    type: String,
+    enum: ['baja', 'media', 'alta'],
+    default: 'media'
+  },
   requisitos: [{
     type: String
   }],

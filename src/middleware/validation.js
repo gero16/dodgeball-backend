@@ -99,7 +99,7 @@ const validateEvento = [
     .withMessage('Formato de hora inválido (HH:MM)'),
   
   body('tipo')
-    .isIn(['torneo', 'entrenamiento', 'liga', 'social', 'benefico'])
+    .isIn(['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'campeonato', 'practica', 'casual', 'no-deportivo'])
     .withMessage('Tipo de evento inválido'),
   
   body('cupoMaximo')
@@ -109,6 +109,26 @@ const validateEvento = [
   body('precio')
     .isFloat({ min: 0 })
     .withMessage('El precio no puede ser negativo'),
+
+  // Campos opcionales adicionales
+  body('tipoJuego')
+    .optional()
+    .isIn(['foam', 'cloth'])
+    .withMessage('El tipo de juego debe ser "foam" o "cloth"'),
+
+  body('dificultad')
+    .optional()
+    .isIn(['baja', 'media', 'alta'])
+    .withMessage('La dificultad debe ser baja, media o alta'),
+
+  body('requisitos')
+    .optional()
+    .isArray()
+    .withMessage('Los requisitos deben ser un arreglo'),
+  body('requisitos.*')
+    .optional()
+    .isString()
+    .withMessage('Cada requisito debe ser texto'),
   
   handleValidationErrors
 ];

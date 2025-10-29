@@ -183,6 +183,7 @@ const crearEvento = async (req, res) => {
       cupoMaximo,
       cupoDisponible,
       imagen,
+      dificultad,
       requisitos,
       datosEspecificos
     } = req.body;
@@ -210,6 +211,7 @@ const crearEvento = async (req, res) => {
       cupoMaximo,
       cupoDisponible,
       imagen,
+      dificultad,
       requisitos,
       datosEspecificos,
       organizador: req.user.id
@@ -281,6 +283,7 @@ const actualizarEvento = async (req, res) => {
         cupoMaximo,
         cupoDisponible,
         imagen,
+      dificultad,
         requisitos,
         datosEspecificos
       },
