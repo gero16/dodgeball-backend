@@ -252,6 +252,8 @@ const actualizarEvento = async (req, res) => {
       tipo,
       tipoJuego, // Nuevo campo
       categoria,
+      genero,
+      dificultad,
       precio,
       cupoMaximo,
       cupoDisponible,
@@ -281,12 +283,12 @@ const actualizarEvento = async (req, res) => {
         tipo,
         tipoJuego, // Incluir en la actualización
         categoria,
-      genero,
+        genero,
         precio,
         cupoMaximo,
         cupoDisponible,
         imagen,
-      dificultad,
+        dificultad,
         requisitos,
         datosEspecificos
       },
