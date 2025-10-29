@@ -179,6 +179,7 @@ const crearEvento = async (req, res) => {
       tipo,
       tipoJuego, // Nuevo campo
       categoria,
+      genero,
       precio,
       cupoMaximo,
       cupoDisponible,
@@ -207,6 +208,7 @@ const crearEvento = async (req, res) => {
       tipo,
       tipoJuego: tipoJuego || 'foam', // Default a 'foam' si no se especifica
       categoria,
+      genero,
       precio,
       cupoMaximo,
       cupoDisponible,
@@ -279,6 +281,7 @@ const actualizarEvento = async (req, res) => {
         tipo,
         tipoJuego, // Incluir en la actualización
         categoria,
+      genero,
         precio,
         cupoMaximo,
         cupoDisponible,

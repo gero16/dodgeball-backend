@@ -90,6 +90,11 @@ const eventoSchema = new mongoose.Schema({
     enum: ['baja', 'media', 'alta'],
     default: 'media'
   },
+  genero: {
+    type: String,
+    enum: ['masculino', 'femenino', 'mixto'],
+    default: 'mixto'
+  },
   requisitos: [{
     type: String
   }],

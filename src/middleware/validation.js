@@ -121,6 +121,11 @@ const validateEvento = [
     .isIn(['baja', 'media', 'alta'])
     .withMessage('La dificultad debe ser baja, media o alta'),
 
+  body('genero')
+    .optional()
+    .isIn(['masculino', 'femenino', 'mixto'])
+    .withMessage('El género debe ser masculino, femenino o mixto'),
+
   body('requisitos')
     .optional()
     .isArray()
