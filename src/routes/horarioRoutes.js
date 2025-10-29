@@ -6,7 +6,8 @@ const {
   agendarHorario,
   obtenerAgenda,
   actualizarHorario,
-  eliminarHorario
+  eliminarHorario,
+  crearHorariosRecurrentes
 } = require('../controllers/horarioController');
 const { auth, adminAuth } = require('../middleware/auth');
 
@@ -18,6 +19,7 @@ router.post('/agendar', auth, agendarHorario);
 
 // Rutas de administrador
 router.post('/crear', adminAuth, crearHorario);
+router.post('/recurrente', adminAuth, crearHorariosRecurrentes);
 router.get('/agenda', adminAuth, obtenerAgenda);
 router.put('/:id', adminAuth, actualizarHorario);
 router.delete('/:id', adminAuth, eliminarHorario);
