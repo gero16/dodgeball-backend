@@ -1,5 +1,6 @@
 const Evento = require('../models/Evento');
 const Estadistica = require('../models/Estadistica');
+const Horario = require('../models/Horario');
 
 // Obtener todos los eventos
 const obtenerEventos = async (req, res) => {
@@ -37,11 +38,28 @@ const obtenerEventos = async (req, res) => {
       sort = { fecha: -1 };
     }
 
-    const eventos = await Evento.find(filtros)
+    const eventosDocs = await Evento.find(filtros)
       .populate('organizador', 'nombre email')
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limite));
+
+    // Calcular próxima fecha por evento basándonos en Horarios vinculados
+    const ahoraISO = new Date();
+    const eventos = await Promise.all(eventosDocs.map(async (ev) => {
+      try {
+        const next = await Horario.findOne({
+          evento: ev._id,
+          activo: true,
+          fecha: { $gte: ahoraISO }
+        }).sort({ fecha: 1, horaInicio: 1 }).lean();
+        const evObj = ev.toObject();
+        if (next?.fecha) evObj.proximaFecha = next.fecha;
+        return evObj;
+      } catch {
+        return ev;
+      }
+    }));
 
     const total = await Evento.countDocuments(filtros);
 
@@ -72,14 +90,25 @@ const obtenerEvento = async (req, res) => {
     const { id } = req.params;
     const { incluirEstadisticas = false } = req.query;
     
-    const evento = await Evento.findById(id).populate('organizador', 'nombre email');
+    const eventoDoc = await Evento.findById(id).populate('organizador', 'nombre email');
     
-    if (!evento) {
+    if (!eventoDoc) {
       return res.status(404).json({
         success: false,
         message: 'Evento no encontrado'
       });
     }
+
+    // Incorporar próxima fecha desde Horarios
+    let evento = eventoDoc.toObject();
+    try {
+      const next = await Horario.findOne({
+        evento: id,
+        activo: true,
+        fecha: { $gte: new Date() }
+      }).sort({ fecha: 1, horaInicio: 1 }).lean();
+      if (next?.fecha) evento.proximaFecha = next.fecha;
+    } catch {}
 
     // Si se solicita incluir estadísticas y es un evento de liga
     if (incluirEstadisticas === 'true' && evento.tipo === 'liga') {
