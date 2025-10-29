@@ -27,6 +27,7 @@ const obtenerHorariosPorFecha = async (req, res) => {
 const crearHorario = async (req, res) => {
   try {
     const {
+      evento,
       fecha,
       horaInicio,
       horaFin,
@@ -39,6 +40,7 @@ const crearHorario = async (req, res) => {
     } = req.body;
 
     const horario = new Horario({
+      evento,
       fecha,
       horaInicio,
       horaFin,
@@ -241,9 +243,11 @@ const eliminarHorario = async (req, res) => {
 const crearHorariosRecurrentes = async (req, res) => {
   try {
     const {
+      evento,
       fechaInicio,        // YYYY-MM-DD
       fechaFin,           // YYYY-MM-DD
-      diaSemana,          // 0=Domingo ... 6=Sábado
+      diaSemana,          // 0=Domingo ... 6=Sábado (compatibilidad)
+      diasSemana,         // [0..6] múltiples días opcional
       horaInicio,
       horaFin,
       tipo = 'entrenamiento',
@@ -255,10 +259,11 @@ const crearHorariosRecurrentes = async (req, res) => {
       omitirFechas = []   // array de YYYY-MM-DD para excluir
     } = req.body;
 
-    if (!fechaInicio || !fechaFin || diaSemana === undefined || !horaInicio || !horaFin || !ubicacion?.nombre) {
+    const tieneDias = (Array.isArray(diasSemana) && diasSemana.length > 0) || (diaSemana !== undefined);
+    if (!fechaInicio || !fechaFin || !tieneDias || !horaInicio || !horaFin || !ubicacion?.nombre) {
       return res.status(400).json({
         success: false,
-        message: 'Campos requeridos: fechaInicio, fechaFin, diaSemana, horaInicio, horaFin, ubicacion.nombre'
+        message: 'Campos requeridos: fechaInicio, fechaFin, diaSemana/diasSemana, horaInicio, horaFin, ubicacion.nombre'
       });
     }
 
@@ -281,52 +286,61 @@ const crearHorariosRecurrentes = async (req, res) => {
         })
     );
 
-    // Encontrar la primera fecha >= start que cae en diaSemana
-    const first = new Date(start);
-    const offset = (diaSemana - first.getDay() + 7) % 7;
-    first.setDate(first.getDate() + offset);
+    const dias = Array.isArray(diasSemana) && diasSemana.length > 0
+      ? Array.from(new Set(diasSemana.map(n => Number(n)).filter(n => n >= 0 && n <= 6)))
+      : [Number(diaSemana)];
 
     const creados = [];
     const saltados = [];
 
-    for (let d = new Date(first); d <= end; d.setDate(d.getDate() + 7)) {
-      const fechaBase = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const key = fechaBase.getTime();
-      if (omitTimestamps.has(key)) {
-        saltados.push(new Date(fechaBase));
-        continue;
+    for (const day of dias) {
+      // Primera fecha >= start que cae en 'day'
+      const first = new Date(start);
+      const offset = (day - first.getDay() + 7) % 7;
+      first.setDate(first.getDate() + offset);
+
+      for (let d = new Date(first); d <= end; d.setDate(d.getDate() + 7)) {
+        const fechaBase = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const key = fechaBase.getTime();
+        if (omitTimestamps.has(key)) {
+          saltados.push(new Date(fechaBase));
+          continue;
+        }
+
+        // Evitar duplicados
+        const filtro = {
+          fecha: fechaBase,
+          horaInicio,
+          horaFin,
+          tipo,
+          'ubicacion.nombre': ubicacion.nombre,
+          activo: true
+        };
+        if (evento) filtro.evento = evento;
+
+        const existente = await Horario.findOne(filtro);
+        if (existente) {
+          saltados.push(new Date(fechaBase));
+          continue;
+        }
+
+        const horario = new Horario({
+          evento,
+          fecha: fechaBase,
+          horaInicio,
+          horaFin,
+          tipo,
+          ubicacion,
+          instructor,
+          descripcion,
+          cupoMaximo,
+          cupoDisponible: cupoMaximo,
+          precio
+        });
+
+        await horario.save();
+        creados.push(horario);
       }
-
-      // Evitar duplicados: misma fecha + horaInicio + horaFin + tipo + ubicacion.nombre
-      const existente = await Horario.findOne({
-        fecha: fechaBase,
-        horaInicio,
-        horaFin,
-        tipo,
-        'ubicacion.nombre': ubicacion.nombre,
-        activo: true
-      });
-
-      if (existente) {
-        saltados.push(new Date(fechaBase));
-        continue;
-      }
-
-      const horario = new Horario({
-        fecha: fechaBase,
-        horaInicio,
-        horaFin,
-        tipo,
-        ubicacion,
-        instructor,
-        descripcion,
-        cupoMaximo,
-        cupoDisponible: cupoMaximo,
-        precio
-      });
-
-      await horario.save();
-      creados.push(horario);
     }
 
     return res.status(201).json({

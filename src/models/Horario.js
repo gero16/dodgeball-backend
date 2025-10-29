@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 
 const horarioSchema = new mongoose.Schema({
+  evento: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Evento'
+  },
   fecha: {
     type: Date,
     required: [true, 'La fecha es obligatoria']
@@ -79,6 +83,7 @@ const horarioSchema = new mongoose.Schema({
 // Índices
 horarioSchema.index({ fecha: 1, horaInicio: 1 });
 horarioSchema.index({ activo: 1, fecha: 1 });
+horarioSchema.index({ evento: 1, fecha: 1 });
 
 // Middleware para actualizar cupo disponible
 horarioSchema.pre('save', function(next) {
