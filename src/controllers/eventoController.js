@@ -1445,8 +1445,10 @@ const obtenerJugadoresEvento = async (req, res) => {
       .lean();
 
     const equiposMap = new Map();
+    const nameToId = new Map();
     // From Equipo model (Jugador)
     for (const eq of equiposDocs) {
+      if (eq?.nombre && eq?._id) nameToId.set(eq.nombre, eq._id);
       const list = (eq.jugadores || [])
         .filter(j => j.jugador)
         .map(j => ({
@@ -1481,7 +1483,51 @@ const obtenerJugadoresEvento = async (req, res) => {
       equiposMap.set(eq.nombre, Array.from(byName.values()));
     }
 
-    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, jugadores }));
+  // Fallback/merge adicional: buscar jugadores por nombreEquipo e ID de equipo en Jugador.estadisticasPorEquipo
+  {
+    const equipoIds = Array.from(nameToId.values()).filter(Boolean);
+    const jugadoresCoincidentes = await Jugador.find({
+      $or: [
+        { 'estadisticasPorEquipo.nombreEquipo': { $in: nombresEquipos } },
+        equipoIds.length ? { 'estadisticasPorEquipo.equipo': { $in: equipoIds } } : { _id: { $exists: true } }
+      ]
+    }).select('nombre apellido estadisticasPorEquipo').lean();
+
+    for (const jug of jugadoresCoincidentes) {
+      const nombreCompleto = `${jug.nombre || ''} ${jug.apellido || ''}`.trim();
+      for (const stat of (jug.estadisticasPorEquipo || [])) {
+        const targetNames = new Set();
+        if (stat?.nombreEquipo && nombresEquipos.includes(stat.nombreEquipo)) {
+          targetNames.add(stat.nombreEquipo);
+        }
+        if (stat?.equipo) {
+          // mapear por ID → nombre
+          for (const [nombre, id] of nameToId.entries()) {
+            if (id?.toString && id.toString() === stat.equipo.toString()) {
+              targetNames.add(nombre);
+            }
+          }
+        }
+        for (const nombreEquipo of targetNames) {
+          const existentes = equiposMap.get(nombreEquipo) || [];
+          const keyLc = nombreCompleto.toLowerCase();
+          if (!existentes.find(p => (p.nombreCompleto || '').toLowerCase() === keyLc)) {
+            existentes.push({
+              id: jug._id,
+              nombre: jug.nombre,
+              apellido: jug.apellido,
+              nombreCompleto,
+              numeroCamiseta: null,
+              posicion: null
+            });
+          }
+          equiposMap.set(nombreEquipo, existentes);
+        }
+      }
+    }
+  }
+
+    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, id: nameToId.get(nombre) || null, jugadores }));
 
     return res.json({ success: true, data: { equipos } });
   } catch (error) {
