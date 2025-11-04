@@ -462,54 +462,133 @@ const obtenerEstadisticasEvento = async (req, res) => {
       });
     }
 
-    // Construir filtros
-    const filtros = { 
-      evento: id, 
-      activo: true 
-    };
-    
-    if (equipo) filtros.equipo = equipo;
+    // Si existen estadísticas de liga manuales, usarlas como fuente principal
+    const ligaStats = evento?.datosEspecificos?.liga?.estadisticasLiga;
+    let rankingGeneral = [];
+    let porEquipoArray = [];
+    let total = 0;
 
-    const skip = (pagina - 1) * limite;
+    if (Array.isArray(ligaStats) && ligaStats.length > 0) {
+      const equiposLiga = (evento.datosEspecificos?.liga?.equipos || []);
+      const equipoNameToDoc = new Map(equiposLiga.map(e => [String(e.nombre || '').toLowerCase().trim(), e]));
+      const toId = (s) => Buffer.from(String(s || '').toLowerCase().trim()).toString('hex').slice(0, 24) || undefined;
+      const splitName = (full) => {
+        const parts = String(full || '').trim().split(/\s+/);
+        if (parts.length === 0) return { nombre: '', apellido: '' };
+        if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+        return { nombre: parts.slice(0, -1).join(' '), apellido: parts[parts.length - 1] };
+      };
+      const norm = (s) => String(s || '').toLowerCase().trim();
+      const calcPct = (num, den) => den > 0 ? (num / den) * 100 : 0;
 
-    // Obtener estadísticas
-    const estadisticas = await Estadistica.find(filtros)
-      .populate('jugador', 'nombre apellido numeroCamiseta posicion')
-      .populate('equipo', 'nombre colorPrincipal colorSecundario')
-      .sort({ indicePoder: -1 }) // Ordenar por índice de poder
-      .skip(skip)
-      .limit(parseInt(limite));
-
-    const total = await Estadistica.countDocuments(filtros);
-
-    // Agrupar por equipo para estadísticas adicionales
-    const estadisticasPorEquipo = {};
-    estadisticas.forEach(estadistica => {
-      const equipoId = estadistica.equipo._id.toString();
-      if (!estadisticasPorEquipo[equipoId]) {
-        estadisticasPorEquipo[equipoId] = {
-          equipo: estadistica.equipo,
-          jugadores: [],
-          totalJugadores: 0,
-          promedioPoder: 0,
-          totalHits: 0,
-          totalTiros: 0
+      const mapped = ligaStats.map((j) => {
+        const equipoNombre = j.equipoNombre || '';
+        const equipoKey = norm(equipoNombre);
+        const equipoDoc = equipoNameToDoc.get(equipoKey) || { nombre: equipoNombre, logo: '' };
+        const { nombre, apellido } = splitName(j.nombreJugador || '');
+        const _id = toId(`${equipoNombre}|${j.nombreJugador}`);
+        return {
+          _id, // para keys en frontend
+          jugador: { _id, nombre, apellido, numeroCamiseta: null },
+          equipo: { _id: toId(equipoNombre) || equipoKey, nombre: equipoDoc.nombre, logo: equipoDoc.logo || '' },
+          setsJugados: j.setsJugados || 0,
+          tirosTotales: j.tirosTotales || 0,
+          hits: j.hits || 0,
+          quemados: j.quemados || 0,
+          asistencias: j.asistencias || 0,
+          tirosRecibidos: j.tirosRecibidos || 0,
+          hitsRecibidos: j.hitsRecibidos || 0,
+          esquives: j.esquives || 0,
+          esquivesSinEsfuerzo: j.esquivesExitosos || 0,
+          ponchado: j.ponchado || 0,
+          catchesIntentados: j.catchesIntentos || 0,
+          catches: j.catches || 0,
+          bloqueosIntentados: j.bloqueosIntentos || 0,
+          bloqueos: j.bloqueos || 0,
+          pisoLinea: j.pisoLinea || 0,
+          catchesRecibidos: j.catchesRecibidos || 0,
+          porcentajeHits: calcPct(j.hits || 0, j.tirosTotales || 0),
+          porcentajeOuts: calcPct(j.ponchado || 0, j.tirosRecibidos || 0),
+          porcentajeCatches: calcPct(j.catches || 0, j.catchesIntentos || 0),
+          porcentajeBloqueos: calcPct(j.bloqueos || 0, j.bloqueosIntentos || 0),
+          indiceAtaque: 0,
+          indiceDefensa: 0,
+          indicePoder: Number(j.poderLiga || 0)
         };
-      }
-      estadisticasPorEquipo[equipoId].jugadores.push(estadistica);
-      estadisticasPorEquipo[equipoId].totalJugadores++;
-      estadisticasPorEquipo[equipoId].totalHits += estadistica.hits;
-      estadisticasPorEquipo[equipoId].totalTiros += estadistica.tirosTotales;
-    });
+      });
 
-    // Calcular promedios
-    Object.values(estadisticasPorEquipo).forEach(equipo => {
-      if (equipo.totalJugadores > 0) {
-        equipo.promedioPoder = equipo.jugadores.reduce((sum, j) => sum + j.indicePoder, 0) / equipo.totalJugadores;
-        equipo.promedioHits = equipo.totalHits / equipo.totalJugadores;
-        equipo.promedioTiros = equipo.totalTiros / equipo.totalJugadores;
+      // Filtro por equipo (si viene como id, también lo soportamos comparando nombre)
+      const filtroEq = equipo ? String(equipo) : '';
+      if (filtroEq) {
+        rankingGeneral = mapped.filter(m => (m.equipo._id?.toString?.() === filtroEq) || (m.equipo._id === filtroEq));
+      } else {
+        rankingGeneral = mapped;
       }
-    });
+
+      // Orden por poder
+      rankingGeneral.sort((a, b) => (b.indicePoder || 0) - (a.indicePoder || 0));
+      total = rankingGeneral.length;
+
+      // Agrupar por equipo
+      const porEquipo = new Map();
+      for (const r of rankingGeneral) {
+        const key = r.equipo._id || norm(r.equipo.nombre);
+        if (!porEquipo.has(key)) {
+          porEquipo.set(key, { equipo: r.equipo, jugadores: [], totalJugadores: 0, promedioPoder: 0, totalHits: 0 });
+        }
+        const acc = porEquipo.get(key);
+        acc.jugadores.push(r);
+        acc.totalJugadores++;
+        acc.totalHits += r.hits || 0;
+      }
+      porEquipoArray = Array.from(porEquipo.values()).map(e => ({
+        ...e,
+        promedioPoder: e.totalJugadores > 0 ? (e.jugadores.reduce((s, j) => s + (j.indicePoder || 0), 0) / e.totalJugadores) : 0,
+        promedioHits: e.totalJugadores > 0 ? (e.totalHits / e.totalJugadores) : 0,
+        totalTiros: e.jugadores.reduce((s, j) => s + (j.tirosTotales || 0), 0)
+      }));
+    } else {
+      // Construir filtros (fuente Estadistica)
+      const filtros = { evento: id, activo: true };
+      if (equipo) filtros.equipo = equipo;
+      const skip = (pagina - 1) * limite;
+
+      const estadisticas = await Estadistica.find(filtros)
+        .populate('jugador', 'nombre apellido numeroCamiseta posicion')
+        .populate('equipo', 'nombre colorPrincipal colorSecundario logo')
+        .sort({ indicePoder: -1 })
+        .skip(skip)
+        .limit(parseInt(limite));
+      total = await Estadistica.countDocuments(filtros);
+
+      rankingGeneral = estadisticas;
+      const estadisticasPorEquipo = {};
+      estadisticas.forEach(estadistica => {
+        const equipoId = estadistica.equipo._id.toString();
+        if (!estadisticasPorEquipo[equipoId]) {
+          estadisticasPorEquipo[equipoId] = {
+            equipo: estadistica.equipo,
+            jugadores: [],
+            totalJugadores: 0,
+            promedioPoder: 0,
+            totalHits: 0,
+            totalTiros: 0
+          };
+        }
+        estadisticasPorEquipo[equipoId].jugadores.push(estadistica);
+        estadisticasPorEquipo[equipoId].totalJugadores++;
+        estadisticasPorEquipo[equipoId].totalHits += estadistica.hits;
+        estadisticasPorEquipo[equipoId].totalTiros += estadistica.tirosTotales;
+      });
+      Object.values(estadisticasPorEquipo).forEach(equipo => {
+        if (equipo.totalJugadores > 0) {
+          equipo.promedioPoder = equipo.jugadores.reduce((sum, j) => sum + j.indicePoder, 0) / equipo.totalJugadores;
+          equipo.promedioHits = equipo.totalHits / equipo.totalJugadores;
+          equipo.promedioTiros = equipo.totalTiros / equipo.totalJugadores;
+        }
+      });
+      porEquipoArray = Object.values(estadisticasPorEquipo);
+    }
 
     res.json({
       success: true,
@@ -521,8 +600,8 @@ const obtenerEstadisticasEvento = async (req, res) => {
         },
         estadisticas: {
           totalJugadores: total,
-          rankingGeneral: estadisticas,
-          porEquipo: Object.values(estadisticasPorEquipo),
+          rankingGeneral,
+          porEquipo: porEquipoArray,
           paginacion: {
             pagina: parseInt(pagina),
             limite: parseInt(limite),
