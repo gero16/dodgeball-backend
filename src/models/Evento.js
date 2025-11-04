@@ -120,6 +120,7 @@ const eventoSchema = new mongoose.Schema({
       equipos: [{
         nombre: String,
         logo: String,
+        plantelNombres: [String],
         puntos: { type: Number, default: 0 },
         partidosJugados: { type: Number, default: 0 },
         partidosGanados: { type: Number, default: 0 },

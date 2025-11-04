@@ -975,6 +975,59 @@ const actualizarEstadisticasPartido = async (req, res) => {
       });
     }
     
+    // Sincronizar roster del evento (plantelNombres) con los jugadores cargados en este partido
+    try {
+      const liga = datosEspecificos.liga || {};
+      const equiposLiga = Array.isArray(liga.equipos) ? liga.equipos : [];
+      const equipoLocalNombre = partidos[partidoIndex].equipoLocal;
+      const equipoVisitanteNombre = partidos[partidoIndex].equipoVisitante;
+
+      const normalizar = (s) => (s || '').toString().trim();
+      const toLower = (s) => normalizar(s).toLowerCase();
+
+      // Recolectar nombres por lado
+      const jugadoresLocales = (partidos[partidoIndex].estadisticasJugadores || [])
+        .filter(j => j.equipo === 'local')
+        .map(j => normalizar(j.nombreJugador))
+        .filter(Boolean);
+      const jugadoresVisitantes = (partidos[partidoIndex].estadisticasJugadores || [])
+        .filter(j => j.equipo === 'visitante')
+        .map(j => normalizar(j.nombreJugador))
+        .filter(Boolean);
+
+      // Helper para mergear evitando duplicados (case-insensitive)
+      const mergeNombres = (existentes = [], nuevos = []) => {
+        const setLc = new Set(existentes.map(n => toLower(n)));
+        const out = [...existentes];
+        for (const n of nuevos) {
+          const key = toLower(n);
+          if (!setLc.has(key)) {
+            setLc.add(key);
+            out.push(n);
+          }
+        }
+        return out;
+      };
+
+      // Aplicar merge a equipos de la liga del evento
+      for (let i = 0; i < equiposLiga.length; i++) {
+        const eq = equiposLiga[i] || {};
+        if (!eq || !eq.nombre) continue;
+        if (eq.nombre === equipoLocalNombre) {
+          eq.plantelNombres = mergeNombres(eq.plantelNombres || [], jugadoresLocales);
+        } else if (eq.nombre === equipoVisitanteNombre) {
+          eq.plantelNombres = mergeNombres(eq.plantelNombres || [], jugadoresVisitantes);
+        }
+        equiposLiga[i] = eq;
+      }
+
+      // Guardar de vuelta en datosEspecificos
+      if (!datosEspecificos.liga) datosEspecificos.liga = {};
+      datosEspecificos.liga.equipos = equiposLiga;
+    } catch (e) {
+      console.warn('⚠️ No se pudo sincronizar plantelNombres desde estadísticas del partido:', e?.message);
+    }
+    
     // Actualizar el evento con los nuevos datos
     evento.datosEspecificos = datosEspecificos;
     
@@ -1450,7 +1503,8 @@ const obtenerJugadoresEvento = async (req, res) => {
     if (!evento) {
       return res.status(404).json({ success: false, message: 'Evento no encontrado' });
     }
-    const nombresEquipos = (evento.datosEspecificos?.liga?.equipos || []).map(e => e.nombre).filter(Boolean);
+    const ligaEquipos = (evento.datosEspecificos?.liga?.equipos || []);
+    const nombresEquipos = ligaEquipos.map(e => e.nombre).filter(Boolean);
     if (!nombresEquipos.length) {
       return res.json({ success: true, data: { equipos: [] } });
     }
@@ -1587,6 +1641,26 @@ const obtenerJugadoresEvento = async (req, res) => {
       }
     }
   }
+
+    // Merge adicional: nombres libres cargados en el evento (plantelNombres)
+    for (const eq of ligaEquipos) {
+      if (!eq?.nombre) continue;
+      const existentes = equiposMap.get(eq.nombre) || [];
+      const adicionales = (eq.plantelNombres || []).map(n => ({
+        id: null,
+        nombre: n,
+        apellido: '',
+        nombreCompleto: n,
+        numeroCamiseta: null,
+        posicion: null
+      }));
+      const byName = new Map(existentes.map(p => [String(p.nombreCompleto || '').toLowerCase(), p]));
+      for (const p of adicionales) {
+        const key = p.nombreCompleto.toLowerCase();
+        if (!byName.has(key)) byName.set(key, p);
+      }
+      equiposMap.set(eq.nombre, Array.from(byName.values()));
+    }
 
     const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, id: nameToId.get(nombre) || null, jugadores }));
 
