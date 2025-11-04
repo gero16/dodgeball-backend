@@ -1145,6 +1145,59 @@ const actualizarPremiosLiga = async (req, res) => {
   }
 };
 
+// Guardar estadísticas de liga (manual, por jugador/agregado de liga)
+const actualizarEstadisticasLigaManual = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { jugadores } = req.body; // arreglo de objetos por jugador a nivel liga
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+
+    if (!evento.datosEspecificos) evento.datosEspecificos = {};
+    if (!evento.datosEspecificos.liga) evento.datosEspecificos.liga = {};
+
+    const normalizeInt = (v) => {
+      if (v === null || v === undefined) return 0;
+      const str = String(v).replace('%', '').replace(',', '.');
+      const n = parseFloat(str);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+
+    const sanitized = Array.isArray(jugadores) ? jugadores.map((j) => ({
+      equipoNombre: (j.equipoNombre || j.equipo || '').toString(),
+      nombreJugador: (j.nombreJugador || j.jugador || '').toString(),
+      partidosJugados: normalizeInt(j.partidosJugados),
+      setsJugados: normalizeInt(j.setsJugados),
+      tirosTotales: normalizeInt(j.tirosTotales),
+      hits: normalizeInt(j.hits),
+      quemados: normalizeInt(j.quemados),
+      asistencias: normalizeInt(j.asistencias),
+      tirosRecibidos: normalizeInt(j.tirosRecibidos),
+      hitsRecibidos: normalizeInt(j.hitsRecibidos),
+      esquives: normalizeInt(j.esquives),
+      esquivesExitosos: normalizeInt(j.esquivesExitosos),
+      ponchado: normalizeInt(j.ponchado),
+      catchesIntentos: normalizeInt(j.catchesIntentos),
+      catches: normalizeInt(j.catches),
+      bloqueosIntentos: normalizeInt(j.bloqueosIntentos),
+      bloqueos: normalizeInt(j.bloqueos),
+      pisoLinea: normalizeInt(j.pisoLinea),
+      catchesRecibidos: normalizeInt(j.catchesRecibidos)
+    })) : [];
+
+    evento.datosEspecificos.liga.estadisticasLiga = sanitized;
+    await evento.save();
+
+    return res.json({ success: true, message: 'Estadísticas de liga guardadas', data: { evento } });
+  } catch (error) {
+    console.error('Error al guardar estadísticas de liga:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 // Obtener detalle de partido
 const obtenerPartidoDetalle = async (req, res) => {
   try {
@@ -1751,5 +1804,6 @@ module.exports = {
   obtenerEstadisticasEvento,
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
-  obtenerJugadoresEvento
+  obtenerJugadoresEvento,
+  actualizarEstadisticasLigaManual
 };
