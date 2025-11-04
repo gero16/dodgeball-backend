@@ -1032,6 +1032,59 @@ const actualizarEstadisticasPartido = async (req, res) => {
       console.warn('⚠️ No se pudo sincronizar plantelNombres desde estadísticas del partido:', e?.message);
     }
     
+    // Calcular estadísticas de equipo agregando estadísticas de jugadores
+    try {
+      const jugadoresPartido = Array.isArray(partidos[partidoIndex].estadisticasJugadores)
+        ? partidos[partidoIndex].estadisticasJugadores
+        : [];
+      const init = () => ({
+        tirosTotales: 0,
+        hits: 0,
+        quemados: 0,
+        asistencias: 0,
+        tirosRecibidos: 0,
+        hitsRecibidos: 0,
+        esquives: 0,
+        esquivesExitosos: 0,
+        ponchado: 0,
+        catchesIntentos: 0,
+        catches: 0,
+        bloqueosIntentos: 0,
+        bloqueos: 0,
+        pisoLinea: 0,
+        catchesRecibidos: 0,
+        setsJugados: 0,
+        tarjetasAmarillas: 0,
+        tarjetasRojas: 0
+      });
+      const sum = { local: init(), visitante: init() };
+      const add = (side, key, val) => { sum[side][key] += (parseInt(val) || 0); };
+      for (const j of jugadoresPartido) {
+        const side = (j.equipo === 'visitante') ? 'visitante' : 'local';
+        add(side, 'tirosTotales', j.tirosTotales);
+        add(side, 'hits', j.hits);
+        add(side, 'quemados', j.quemados);
+        add(side, 'asistencias', j.asistencias);
+        add(side, 'tirosRecibidos', j.tirosRecibidos);
+        add(side, 'hitsRecibidos', j.hitsRecibidos);
+        add(side, 'esquives', j.dodges); // "dodges" a nivel jugador → "esquives" agregado
+        add(side, 'esquivesExitosos', j.esquivesExitosos);
+        add(side, 'ponchado', j.ponchado);
+        add(side, 'catchesIntentos', j.catchesIntentos);
+        add(side, 'catches', j.catches);
+        add(side, 'bloqueosIntentos', j.bloqueosIntentos);
+        add(side, 'bloqueos', j.bloqueos);
+        add(side, 'pisoLinea', j.pisoLinea);
+        add(side, 'catchesRecibidos', j.catchesRecibidos);
+        add(side, 'setsJugados', j.setsJugados);
+        add(side, 'tarjetasAmarillas', j.tarjetasAmarillas);
+        add(side, 'tarjetasRojas', j.tarjetasRojas);
+      }
+      partidos[partidoIndex].estadisticas = sum;
+    } catch (e) {
+      console.warn('⚠️ No se pudo agregar estadísticas de equipo desde jugadores:', e?.message);
+    }
+
     // Actualizar el evento con los nuevos datos
     evento.datosEspecificos = datosEspecificos;
     
