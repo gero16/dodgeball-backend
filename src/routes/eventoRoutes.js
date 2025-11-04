@@ -25,7 +25,9 @@ const {
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,
-  actualizarEstadisticasLigaManual
+  actualizarEstadisticasLigaManual,
+  upsertEstadisticasJugadores,
+  migrarEstadisticasLigaAEstadistica
 } = require('../controllers/eventoController');
 
 const { auth } = require('../middleware/auth');
@@ -65,5 +67,7 @@ router.post('/:id/estadisticas/preview', upload.single('archivo'), previsualizar
 router.post('/:id/estadisticas/upload', upload.single('archivo'), procesarHojaCalculoEstadisticas);
 router.get('/:id/jugadores', obtenerJugadoresEvento);
 router.put('/:id/estadisticas/liga-manual', actualizarEstadisticasLigaManual);
+router.put('/:id/estadisticas/jugadores', upsertEstadisticasJugadores);
+router.post('/:id/estadisticas/jugadores/migrar', migrarEstadisticasLigaAEstadistica);
 
 module.exports = router;

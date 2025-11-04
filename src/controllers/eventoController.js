@@ -644,6 +644,144 @@ const obtenerEventosDestacados = async (req, res) => {
   }
 };
 
+// Upsert de estadísticas de jugadores (ranking) en colección Estadistica
+const upsertEstadisticasJugadores = async (req, res) => {
+  try {
+    const { id } = req.params; // evento id
+    const { jugadores } = req.body; // array
+    if (!Array.isArray(jugadores) || jugadores.length === 0) {
+      return res.status(400).json({ success: false, message: 'No se enviaron jugadores' });
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+
+    const equiposDocs = await Equipo.find({});
+    const equipoByName = new Map(equiposDocs.map(e => [String(e.nombre || '').toLowerCase().trim(), e]));
+
+    const norm = (s) => String(s || '').toLowerCase().trim();
+    const splitName = (full) => {
+      const parts = String(full || '').trim().split(/\s+/);
+      if (parts.length === 0) return { nombre: '', apellido: '' };
+      if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+      return { nombre: parts.slice(0, -1).join(' '), apellido: parts[parts.length - 1] };
+    };
+    const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
+
+    const bulk = [];
+    const created = { equipos: 0, jugadores: 0 };
+
+    for (const j of jugadores) {
+      const equipoNombre = j.equipoNombre || j.equipo || '';
+      const jugadorNombre = j.nombreJugador || j.jugador || '';
+      if (!equipoNombre || !jugadorNombre) continue;
+
+      let equipoDoc = equipoByName.get(norm(equipoNombre));
+      if (!equipoDoc) {
+        equipoDoc = new Equipo({ nombre: equipoNombre, tipo: 'otro' });
+        await equipoDoc.save();
+        equipoByName.set(norm(equipoNombre), equipoDoc);
+        created.equipos++;
+      }
+
+      const { nombre, apellido } = splitName(jugadorNombre);
+      let jugadorDoc = await Jugador.findOne({ nombre, apellido });
+      if (!jugadorDoc) {
+        jugadorDoc = new Jugador({ nombre, apellido, activo: true });
+        await jugadorDoc.save();
+        created.jugadores++;
+      }
+
+      const tirosTotales = parseInt(j.tirosTotales) || 0;
+      const hits = parseInt(j.hits) || 0;
+      const quemados = parseInt(j.quemados) || 0;
+      const asistencias = parseInt(j.asistencias) || 0;
+      const tirosRecibidos = parseInt(j.tirosRecibidos) || 0;
+      const hitsRecibidos = parseInt(j.hitsRecibidos) || 0;
+      const esquives = parseInt(j.esquives) || 0;
+      const esquivesExitosos = parseInt(j.esquivesExitosos) || 0;
+      const ponchado = parseInt(j.ponchado) || 0;
+      const catchesIntentos = parseInt(j.catchesIntentos) || 0;
+      const catches = parseInt(j.catches) || 0;
+      const bloqueosIntentos = parseInt(j.bloqueosIntentos) || 0;
+      const bloqueos = parseInt(j.bloqueos) || 0;
+      const pisoLinea = parseInt(j.pisoLinea) || 0;
+      const catchesRecibidos = parseInt(j.catchesRecibidos) || 0;
+      const setsJugados = parseInt(j.setsJugados) || 0;
+      const indicePoder = Number(j.poderLiga || j.indicePoder || 0);
+
+      const update = {
+        equipo: equipoDoc._id,
+        jugador: jugadorDoc._id,
+        evento: evento._id,
+        setsJugados,
+        tirosTotales,
+        hits,
+        quemados,
+        asistencias,
+        tirosRecibidos,
+        hitsRecibidos,
+        esquives,
+        esquivesSinEsfuerzo: esquivesExitosos,
+        ponchado,
+        catchesIntentados,
+        catches,
+        bloqueosIntentados,
+        bloqueos,
+        pisoLinea,
+        catchesRecibidos,
+        porcentajeHits: pct(hits, tirosTotales),
+        porcentajeOuts: pct(ponchado, tirosRecibidos),
+        porcentajeCatches: pct(catches, catchesIntentos),
+        porcentajeBloqueos: pct(bloqueos, bloqueosIntentos),
+        indiceAtaque: Number(j.indiceAtaque || 0),
+        indiceDefensa: Number(j.indiceDefensa || 0),
+        indicePoder
+      };
+
+      bulk.push({
+        updateOne: {
+          filter: { evento: evento._id, equipo: equipoDoc._id, jugador: jugadorDoc._id },
+          update: { $set: update },
+          upsert: true
+        }
+      });
+    }
+
+    if (bulk.length === 0) {
+      return res.status(400).json({ success: false, message: 'Nada para guardar' });
+    }
+
+    await Estadistica.bulkWrite(bulk);
+
+    return res.json({ success: true, message: 'Estadísticas de jugadores guardadas', data: { creados: created } });
+  } catch (error) {
+    console.error('Error al upsert estadísticas de jugadores:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
+// Migrar estadísticasLiga del evento a colección Estadistica
+const migrarEstadisticasLigaAEstadistica = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const evento = await Evento.findById(id);
+    if (!evento) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+
+    const ligaStats = evento?.datosEspecificos?.liga?.estadisticasLiga || [];
+    if (!Array.isArray(ligaStats) || ligaStats.length === 0) {
+      return res.status(400).json({ success: false, message: 'No hay estadísticas de liga para migrar' });
+    }
+
+    // Reutilizar lógica de upsert
+    req.body.jugadores = ligaStats;
+    return await upsertEstadisticasJugadores(req, res);
+  } catch (error) {
+    console.error('Error al migrar estadísticas de liga:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 // Inscribir usuario a un evento
 const inscribirUsuario = async (req, res) => {
   try {
@@ -1891,5 +2029,7 @@ module.exports = {
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,
-  actualizarEstadisticasLigaManual
+  actualizarEstadisticasLigaManual,
+  upsertEstadisticasJugadores,
+  migrarEstadisticasLigaAEstadistica
 };
