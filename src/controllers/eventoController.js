@@ -961,11 +961,14 @@ const actualizarEstadisticasPartido = async (req, res) => {
         hits: parseInt(j.hits) || 0,
           tirosRecibidos: parseInt(j.tirosRecibidos) || 0,
         catches: parseInt(j.catches) || 0,
+          catchesRecibidos: parseInt(j.catchesRecibidos) || 0,
         dodges: parseInt(j.dodges) || 0,
         bloqueos: parseInt(j.bloqueos) || 0,
           bloqueosIntentos: parseInt(j.bloqueosIntentos) || 0,
         quemados: parseInt(j.quemados) || 0,
           ponchado: parseInt(j.ponchado) || 0,
+          pisoLinea: parseInt(j.pisoLinea) || 0,
+          setsJugados: parseInt(j.setsJugados) || 0,
         tarjetasAmarillas: parseInt(j.tarjetasAmarillas) || 0,
         tarjetasRojas: parseInt(j.tarjetasRojas) || 0
         };

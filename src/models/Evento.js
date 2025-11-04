@@ -154,6 +154,9 @@ const eventoSchema = new mongoose.Schema({
           bloqueosIntentos: { type: Number, default: 0 },
           quemados: { type: Number, default: 0 },
           ponchado: { type: Number, default: 0 },
+          pisoLinea: { type: Number, default: 0 },
+          catchesRecibidos: { type: Number, default: 0 },
+          setsJugados: { type: Number, default: 0 },
           tarjetasAmarillas: { type: Number, default: 0 },
           tarjetasRojas: { type: Number, default: 0 }
         }],
