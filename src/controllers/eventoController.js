@@ -1493,6 +1493,35 @@ const obtenerJugadoresEvento = async (req, res) => {
       ]
     }).select('nombre apellido estadisticasPorEquipo').lean();
 
+    // Construir helpers de normalización y mapeos por nombre
+    const normalize = (s) => (s || '')
+      .toString()
+      .toLowerCase()
+      .replace(/^\s*the\s+/, '') // quitar artículo inicial común
+      .replace(/\s+/g, ' ')
+      .trim();
+    const stripPlural = (s) => s.endsWith('s') ? s.slice(0, -1) : s;
+
+    const eventNameByNorm = new Map();
+    for (const nombre of nombresEquipos) {
+      const n = normalize(nombre);
+      eventNameByNorm.set(n, nombre);
+      eventNameByNorm.set(stripPlural(n), nombre);
+    }
+
+    // Capturar todos los equipoIds que aparecen en estadísticas de jugadores
+    const allEquipoIdsFromStats = new Set();
+    for (const jug of jugadoresCoincidentes) {
+      for (const st of (jug.estadisticasPorEquipo || [])) {
+        if (st?.equipo) allEquipoIdsFromStats.add(st.equipo.toString());
+      }
+    }
+    // Traer nombres reales de esos equipos por ID
+    const equiposDeStats = await Equipo.find({ _id: { $in: Array.from(allEquipoIdsFromStats) } })
+      .select('_id nombre')
+      .lean();
+    const equipoIdToNombre = new Map(equiposDeStats.map(e => [e._id.toString(), e.nombre]));
+
     for (const jug of jugadoresCoincidentes) {
       const nombreCompleto = `${jug.nombre || ''} ${jug.apellido || ''}`.trim();
       for (const stat of (jug.estadisticasPorEquipo || [])) {
@@ -1506,6 +1535,15 @@ const obtenerJugadoresEvento = async (req, res) => {
             if (id?.toString && id.toString() === stat.equipo.toString()) {
               targetNames.add(nombre);
             }
+          }
+          // intentar por normalización de nombres (p. ej. singular/plural, mayúsculas)
+          const equipoNombreReal = equipoIdToNombre.get(stat.equipo.toString());
+          if (equipoNombreReal) {
+            const normReal = normalize(equipoNombreReal);
+            const direct = eventNameByNorm.get(normReal);
+            const strip = eventNameByNorm.get(stripPlural(normReal));
+            if (direct) targetNames.add(direct);
+            if (strip) targetNames.add(strip);
           }
         }
         for (const nombreEquipo of targetNames) {
