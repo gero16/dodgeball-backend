@@ -145,11 +145,15 @@ const eventoSchema = new mongoose.Schema({
           nombreJugador: String,
           equipo: { type: String, enum: ['local', 'visitante'] },
           // Métricas principales
+          tirosTotales: { type: Number, default: 0 },
           hits: { type: Number, default: 0 },
+          tirosRecibidos: { type: Number, default: 0 },
           catches: { type: Number, default: 0 },
-          dodges: { type: Number, default: 0 },
+          dodges: { type: Number, default: 0 }, // Esquives
           bloqueos: { type: Number, default: 0 },
+          bloqueosIntentos: { type: Number, default: 0 },
           quemados: { type: Number, default: 0 },
+          ponchado: { type: Number, default: 0 },
           tarjetasAmarillas: { type: Number, default: 0 },
           tarjetasRojas: { type: Number, default: 0 }
         }],
