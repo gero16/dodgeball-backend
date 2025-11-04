@@ -1486,9 +1486,17 @@ const obtenerJugadoresEvento = async (req, res) => {
   // Fallback/merge adicional: buscar jugadores por nombreEquipo e ID de equipo en Jugador.estadisticasPorEquipo
   {
     const equipoIds = Array.from(nameToId.values()).filter(Boolean);
+    // Construir regex por nombre (insensible a mayúsculas, opcional "the " inicial y plural final)
+    const toPattern = (s) => {
+      const base = (s || '').toString().trim().replace(/^the\s+/i, '');
+      const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`^(?:the\\s+)?${escaped}s?$`, 'i');
+    };
+    const nombreRegexes = nombresEquipos.map(toPattern);
+
     const jugadoresCoincidentes = await Jugador.find({
       $or: [
-        { 'estadisticasPorEquipo.nombreEquipo': { $in: nombresEquipos } },
+        { 'estadisticasPorEquipo.nombreEquipo': { $in: nombreRegexes } },
         equipoIds.length ? { 'estadisticasPorEquipo.equipo': { $in: equipoIds } } : { _id: { $exists: true } }
       ]
     }).select('nombre apellido estadisticasPorEquipo').lean();
