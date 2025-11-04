@@ -1,6 +1,85 @@
 const Evento = require('../models/Evento');
 const Estadistica = require('../models/Estadistica');
 const Horario = require('../models/Horario');
+const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
+
+// Utilidad: construir resumen por categoría/equipo/jugador a partir de filas crudas
+function buildSummaryFromRows(rows) {
+  // Mapeo de alias -> clave canónica
+  const metricAliases = {
+    // Métricas existentes
+    hits: ['Hits', 'hits', 'Local Hits', 'Visitante Hits', 'Hits Local', 'Hits Visitante', 'Tiros acertados', 'Tiros acertados (incluye bloqueos)'],
+    catches: ['Catches', 'catches', 'Local Catches', 'Visitante Catches', 'Catches Local', 'Catches Visitante'],
+    dodges: ['Dodges', 'dodges', 'Esquives', 'esquives', 'Local Dodges', 'Visitante Dodges'],
+    bloqueos: ['Bloqueos', 'bloqueos', 'Local Bloqueos', 'Visitante Bloqueos', 'Bloqueos realizados'],
+    quemados: ['Quemados', 'quemados', 'Outs', 'outs', 'Local Quemados', 'Visitante Quemados', 'Tiros con Outs', 'Tiros con Outs (manchar)'],
+    tarjetasAmarillas: ['Tarjetas Amarillas', 'tarjetasAmarillas'],
+    tarjetasRojas: ['Tarjetas Rojas', 'tarjetasRojas'],
+
+    // Nuevas del Excel enviado
+    tirosTotales: ['Tiros totales'],
+    asistencias: ['Asistencia', 'Asistencias'],
+    tirosRecibidos: ['Tiros recibidos'],
+    tirosRecibidosAcertados: ['Tiros recibidos acertados'],
+    esquivesSinEsfuerzo: ['Esquive pero que no tuvimos que h', 'Esquive sin esfuerzo'],
+    ponchado: ['Ponchado'],
+    catchesIntentos: ['Intentos de catches'],
+    bloqueosIntentos: ['Bloqueos intentados'],
+    pisoLinea: ['Piso linea', 'Piso línea'],
+    catchesRecibidos: ['Catches Recibidos'],
+    setsJugados: ['Jugo set', 'Jugó set', 'Sets jugados'],
+    indiceAtaque: ['ATAQUE'],
+    indiceDefensa: ['DEFENSA'],
+    ponderadorSet: ['Ponderador set']
+  };
+
+  const aliasToKey = new Map();
+  Object.entries(metricAliases).forEach(([key, aliases]) => {
+    aliases.forEach(a => aliasToKey.set(a.toLowerCase(), key));
+  });
+
+  const toInt = (val) => {
+    if (val === null || val === undefined || val === '') return 0;
+    const n = Number(val);
+    return Number.isFinite(n) ? Math.trunc(n) : 0;
+  };
+
+  const getField = (row, names) => {
+    for (const name of names) {
+      const v = row[name];
+      if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return undefined;
+  };
+
+  const categories = {};
+
+  for (const row of rows) {
+    const categoria = (getField(row, ['Categoria', 'categoria', 'Category']) || 'General').toString().trim() || 'General';
+    const equipo = (getField(row, ['Equipo', 'equipo', 'Team', 'team', 'Equipo Local', 'Equipo Visitante']) || 'Sin Equipo').toString().trim() || 'Sin Equipo';
+    const jugador = (getField(row, ['Jugador', 'jugador', 'Nombre', 'nombre', 'Player', 'player']) || '').toString().trim();
+
+    // Inicializar contenedores
+    if (!categories[categoria]) categories[categoria] = { equipos: {}, jugadores: {} };
+    if (!categories[categoria].equipos[equipo]) categories[categoria].equipos[equipo] = { totals: {} };
+    if (jugador && !categories[categoria].jugadores[jugador]) categories[categoria].jugadores[jugador] = { equipo, totals: {} };
+
+    // Recorrer columnas del row y acumular si son métricas conocidas
+    for (const [colName, value] of Object.entries(row)) {
+      const key = aliasToKey.get(colName.toLowerCase());
+      if (!key) continue;
+      const amount = toInt(value);
+      categories[categoria].equipos[equipo].totals[key] = (categories[categoria].equipos[equipo].totals[key] || 0) + amount;
+      if (jugador) {
+        categories[categoria].jugadores[jugador].totals[key] = (categories[categoria].jugadores[jugador].totals[key] || 0) + amount;
+      }
+    }
+  }
+
+  return { categories };
+}
 
 // Obtener todos los eventos
 const obtenerEventos = async (req, res) => {
@@ -1041,6 +1120,202 @@ const recalcularTablaPosiciones = async (evento, partidos) => {
   console.log('✅ Tabla recalculada. Equipos:', equipos.map(e => e.nombre + ': ' + e.puntos + 'pts'));
 };
 
+// Procesar hoja de cálculo con estadísticas de partidos
+const procesarHojaCalculoEstadisticas = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se proporcionó ningún archivo'
+      });
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({
+        success: false,
+        message: 'Evento no encontrado'
+      });
+    }
+
+    // Leer el archivo
+    const filePath = req.file.path;
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+    if (data.length === 0) {
+      // Eliminar el archivo temporal
+      fs.unlinkSync(filePath);
+      return res.status(400).json({
+        success: false,
+        message: 'La hoja de cálculo está vacía'
+      });
+    }
+
+    // Crear una copia profunda de los datos específicos
+    const datosEspecificos = JSON.parse(JSON.stringify(evento.datosEspecificos || {}));
+    const partidos = datosEspecificos.liga?.partidos || [];
+    const equipos = datosEspecificos.liga?.equipos || [];
+
+    let partidosActualizados = 0;
+    let partidosNoEncontrados = [];
+    const errores = [];
+
+    // Procesar cada fila de la hoja de cálculo
+    for (const row of data) {
+      try {
+        // Intentar identificar el partido por diferentes columnas posibles
+        const equipoLocal = (row['Equipo Local'] || row['EquipoLocal'] || row['Local'] || row['Equipo 1'] || row['Equipo1'] || '').toString().trim();
+        const equipoVisitante = (row['Equipo Visitante'] || row['EquipoVisitante'] || row['Visitante'] || row['Equipo 2'] || row['Equipo2'] || '').toString().trim();
+        const fechaStr = row['Fecha'] || row['fecha'] || row['Date'] || row['date'];
+        
+        if (!equipoLocal || !equipoVisitante) {
+          errores.push(`Fila sin equipos identificados: ${JSON.stringify(row)}`);
+          continue;
+        }
+
+        // Buscar el partido correspondiente
+        let partidoIndex = -1;
+        if (fechaStr) {
+          // Intentar buscar por fecha y equipos
+          const fechaRow = new Date(fechaStr);
+          partidoIndex = partidos.findIndex(p => {
+            const fechaPartido = new Date(p.fecha);
+            return fechaPartido.toDateString() === fechaRow.toDateString() &&
+                   (p.equipoLocal === equipoLocal || p.equipoLocal === equipoLocal.split(' ')[0]) &&
+                   (p.equipoVisitante === equipoVisitante || p.equipoVisitante === equipoVisitante.split(' ')[0]);
+          });
+        }
+        
+        // Si no se encontró por fecha, buscar solo por equipos
+        if (partidoIndex === -1) {
+          partidoIndex = partidos.findIndex(p => 
+            (p.equipoLocal === equipoLocal || p.equipoLocal.includes(equipoLocal) || equipoLocal.includes(p.equipoLocal)) &&
+            (p.equipoVisitante === equipoVisitante || p.equipoVisitante.includes(equipoVisitante) || equipoVisitante.includes(p.equipoVisitante))
+          );
+        }
+
+        if (partidoIndex === -1) {
+          partidosNoEncontrados.push(`${equipoLocal} vs ${equipoVisitante}`);
+          continue;
+        }
+
+        // Extraer estadísticas de la fila
+        const statsLocal = {
+          hits: parseInt(row['Local Hits'] || row['LocalHits'] || row['Hits Local'] || row['HitsLocal'] || row['Local - Hits'] || 0) || 0,
+          catches: parseInt(row['Local Catches'] || row['LocalCatches'] || row['Catches Local'] || row['CatchesLocal'] || row['Local - Catches'] || 0) || 0,
+          dodges: parseInt(row['Local Dodges'] || row['LocalDodges'] || row['Dodges Local'] || row['DodgesLocal'] || row['Local - Dodges'] || 0) || 0,
+          bloqueos: parseInt(row['Local Bloqueos'] || row['LocalBloqueos'] || row['Bloqueos Local'] || row['BloqueosLocal'] || row['Local - Bloqueos'] || 0) || 0,
+          quemados: parseInt(row['Local Quemados'] || row['LocalQuemados'] || row['Quemados Local'] || row['QuemadosLocal'] || row['Local - Quemados'] || 0) || 0,
+          tarjetasAmarillas: parseInt(row['Local Tarjetas Amarillas'] || row['LocalTarjetasAmarillas'] || row['Tarjetas Amarillas Local'] || row['Local - Tarjetas Amarillas'] || 0) || 0,
+          tarjetasRojas: parseInt(row['Local Tarjetas Rojas'] || row['LocalTarjetasRojas'] || row['Tarjetas Rojas Local'] || row['Local - Tarjetas Rojas'] || 0) || 0
+        };
+
+        const statsVisitante = {
+          hits: parseInt(row['Visitante Hits'] || row['VisitanteHits'] || row['Hits Visitante'] || row['HitsVisitante'] || row['Visitante - Hits'] || 0) || 0,
+          catches: parseInt(row['Visitante Catches'] || row['VisitanteCatches'] || row['Catches Visitante'] || row['CatchesVisitante'] || row['Visitante - Catches'] || 0) || 0,
+          dodges: parseInt(row['Visitante Dodges'] || row['VisitanteDodges'] || row['Dodges Visitante'] || row['DodgesVisitante'] || row['Visitante - Dodges'] || 0) || 0,
+          bloqueos: parseInt(row['Visitante Bloqueos'] || row['VisitanteBloqueos'] || row['Bloqueos Visitante'] || row['BloqueosVisitante'] || row['Visitante - Bloqueos'] || 0) || 0,
+          quemados: parseInt(row['Visitante Quemados'] || row['VisitanteQuemados'] || row['Quemados Visitante'] || row['QuemadosVisitante'] || row['Visitante - Quemados'] || 0) || 0,
+          tarjetasAmarillas: parseInt(row['Visitante Tarjetas Amarillas'] || row['VisitanteTarjetasAmarillas'] || row['Tarjetas Amarillas Visitante'] || row['Visitante - Tarjetas Amarillas'] || 0) || 0,
+          tarjetasRojas: parseInt(row['Visitante Tarjetas Rojas'] || row['VisitanteTarjetasRojas'] || row['Tarjetas Rojas Visitante'] || row['Visitante - Tarjetas Rojas'] || 0) || 0
+        };
+
+        // Actualizar las estadísticas del partido
+        if (!partidos[partidoIndex].estadisticas) {
+          partidos[partidoIndex].estadisticas = { local: {}, visitante: {} };
+        }
+        partidos[partidoIndex].estadisticas.local = statsLocal;
+        partidos[partidoIndex].estadisticas.visitante = statsVisitante;
+        
+        partidosActualizados++;
+      } catch (error) {
+        errores.push(`Error procesando fila: ${error.message}`);
+      }
+    }
+
+    // Actualizar el evento
+    evento.datosEspecificos = datosEspecificos;
+    await evento.save();
+
+    // Eliminar el archivo temporal
+    try {
+      fs.unlinkSync(filePath);
+    } catch (error) {
+      console.error('Error al eliminar archivo temporal:', error);
+    }
+
+    res.json({
+      success: true,
+      message: 'Hoja de cálculo procesada exitosamente',
+      data: {
+        partidosActualizados,
+        partidosNoEncontrados: partidosNoEncontrados.length > 0 ? partidosNoEncontrados : undefined,
+        errores: errores.length > 0 ? errores : undefined,
+        totalFilas: data.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al procesar hoja de cálculo:', error);
+    
+    // Intentar eliminar el archivo temporal en caso de error
+    if (req.file?.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {
+        console.error('Error al eliminar archivo temporal:', err);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error al procesar la hoja de cálculo',
+      error: error.message
+    });
+  }
+};
+
+// Previsualizar hoja de cálculo sin persistir cambios
+const previsualizarHojaCalculoEstadisticas = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No se proporcionó ningún archivo' });
+    }
+
+    const filePath = req.file.path;
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: null });
+
+    try { fs.unlinkSync(filePath); } catch {}
+
+    if (data.length === 0) {
+      return res.status(400).json({ success: false, message: 'La hoja de cálculo está vacía' });
+    }
+
+    const summary = buildSummaryFromRows(data);
+
+    return res.json({
+      success: true,
+      message: 'Previsualización generada',
+      data: {
+        totalFilas: data.length,
+        categorias: Object.keys(summary.categories).length,
+        resumen: summary
+      }
+    });
+  } catch (error) {
+    console.error('Error en previsualización:', error);
+    return res.status(500).json({ success: false, message: 'Error al generar la previsualización', error: error.message });
+  }
+};
+
 module.exports = {
   obtenerEventos,
   obtenerEvento,
@@ -1061,5 +1336,7 @@ module.exports = {
   actualizarEstadisticasPartido,
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
-  obtenerEstadisticasEvento
+  obtenerEstadisticasEvento,
+  procesarHojaCalculoEstadisticas,
+  previsualizarHojaCalculoEstadisticas
 };

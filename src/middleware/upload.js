@@ -42,14 +42,18 @@ const storage = multer.diskStorage({
 // Filtro de archivos
 const fileFilter = (req, file, cb) => {
   // Tipos de archivo permitidos
-  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx/;
+  const allowedTypes = /jpeg|jpg|png|gif|webp|pdf|doc|docx|xlsx|xls|csv/;
   const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  const mimetype = allowedTypes.test(file.mimetype) || 
+    file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    file.mimetype === 'application/vnd.ms-excel' ||
+    file.mimetype === 'text/csv' ||
+    file.mimetype === 'application/csv';
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Tipo de archivo no permitido. Solo se permiten imágenes, PDFs y documentos de Word.'));
+    cb(new Error('Tipo de archivo no permitido. Solo se permiten imágenes, PDFs, documentos de Word y hojas de cálculo (Excel, CSV).'));
   }
 };
 
