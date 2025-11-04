@@ -23,9 +23,10 @@ router.get('/destacadas/lista', obtenerDestacadas);
 // Permitir omitir auth para crear publicaciones si ALLOW_UNAUTH_PUBLICATIONS=true (solo desarrollo)
 const allowUnauthCreate = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
 const authOrBypassCreate = (req, res, next) => allowUnauthCreate ? next() : auth(req, res, next);
+const validateOrBypassPublicacion = (req, res, next) => allowUnauthCreate ? next() : validatePublicacion(req, res, next);
 
 // Rutas protegidas
-router.post('/crear', authOrBypassCreate, upload.single('imagen'), handleUploadError, validatePublicacion, crearPublicacion);
+router.post('/crear', authOrBypassCreate, upload.single('imagen'), handleUploadError, validateOrBypassPublicacion, crearPublicacion);
 router.put('/:id', auth, upload.single('imagen'), handleUploadError, validatePublicacion, actualizarPublicacion);
 router.delete('/:id', auth, eliminarPublicacion);
 router.post('/:id/comentarios', auth, agregarComentario);

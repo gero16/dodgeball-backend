@@ -1,5 +1,5 @@
 const Publicacion = require('../models/Publicacion');
-const Usuario = require('../models/Usuario');
+const mongoose = require('mongoose');
 
 // Obtener todas las publicaciones
 const obtenerPublicaciones = async (req, res) => {
@@ -96,21 +96,9 @@ const crearPublicacion = async (req, res) => {
     const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
     let autorId = req.usuario?.id || process.env.DEFAULT_AUTHOR_ID;
 
+    // En modo sin auth, si no hay autor definido, usar un ObjectId anónimo
     if (!autorId && allowUnauth) {
-      // Buscar o crear un usuario del sistema para autor por defecto
-      const defaultEmail = process.env.DEFAULT_AUTHOR_EMAIL || 'sistema@dodgeball.local';
-      let autor = await Usuario.findOne({ email: defaultEmail });
-      if (!autor) {
-        autor = new Usuario({
-          nombre: process.env.DEFAULT_AUTHOR_NAME || 'Sistema',
-          email: defaultEmail,
-          password: process.env.DEFAULT_AUTHOR_PASSWORD || 'cambiar123',
-          rol: 'admin',
-          activo: true
-        });
-        await autor.save();
-      }
-      autorId = autor._id;
+      autorId = new mongoose.Types.ObjectId();
     }
 
     if (!autorId && !allowUnauth) {
