@@ -130,6 +130,28 @@ const eventoSchema = new mongoose.Schema({
         golesContra: { type: Number, default: 0 },
         diferenciaGoles: { type: Number, default: 0 }
       }],
+      // Estadísticas manuales a nivel de liga (pegadas desde ranking por jugador)
+      estadisticasLiga: [{
+        equipoNombre: String,
+        nombreJugador: String,
+        partidosJugados: { type: Number, default: 0 },
+        setsJugados: { type: Number, default: 0 },
+        tirosTotales: { type: Number, default: 0 },
+        hits: { type: Number, default: 0 },
+        quemados: { type: Number, default: 0 },
+        asistencias: { type: Number, default: 0 },
+        tirosRecibidos: { type: Number, default: 0 },
+        hitsRecibidos: { type: Number, default: 0 },
+        esquives: { type: Number, default: 0 },
+        esquivesExitosos: { type: Number, default: 0 },
+        ponchado: { type: Number, default: 0 },
+        catchesIntentos: { type: Number, default: 0 },
+        catches: { type: Number, default: 0 },
+        bloqueosIntentos: { type: Number, default: 0 },
+        bloqueos: { type: Number, default: 0 },
+        pisoLinea: { type: Number, default: 0 },
+        catchesRecibidos: { type: Number, default: 0 }
+      }],
       partidos: [{
         fecha: Date,
         equipoLocal: String,
