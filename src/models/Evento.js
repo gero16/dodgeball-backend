@@ -140,6 +140,19 @@ const eventoSchema = new mongoose.Schema({
           enum: ['programado', 'en-curso', 'finalizado', 'cancelado'],
           default: 'programado'
         },
+        // Estadísticas individuales por jugador (opcional)
+        estadisticasJugadores: [{
+          nombreJugador: String,
+          equipo: { type: String, enum: ['local', 'visitante'] },
+          // Métricas principales
+          hits: { type: Number, default: 0 },
+          catches: { type: Number, default: 0 },
+          dodges: { type: Number, default: 0 },
+          bloqueos: { type: Number, default: 0 },
+          quemados: { type: Number, default: 0 },
+          tarjetasAmarillas: { type: Number, default: 0 },
+          tarjetasRojas: { type: Number, default: 0 }
+        }],
         estadisticas: {
           local: {
             hits: { type: Number, default: 0 },

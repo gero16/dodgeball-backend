@@ -2,6 +2,8 @@ const Evento = require('../models/Evento');
 const Estadistica = require('../models/Estadistica');
 const Horario = require('../models/Horario');
 const XLSX = require('xlsx');
+const Jugador = require('../models/Jugador');
+const Equipo = require('../models/Equipo');
 const fs = require('fs');
 const path = require('path');
 
@@ -906,7 +908,7 @@ const actualizarResultadoPartido = async (req, res) => {
 const actualizarEstadisticasPartido = async (req, res) => {
   try {
     const { id, partidoId } = req.params;
-    const { estadisticas } = req.body;
+    const { estadisticas, estadisticasJugadores } = req.body;
 
     console.log('🔍 DEBUG - ID del evento:', id);
     console.log('🔍 DEBUG - ID del partido:', partidoId);
@@ -941,8 +943,22 @@ const actualizarEstadisticasPartido = async (req, res) => {
 
     console.log('🔍 DEBUG - Partido antes de actualizar:', JSON.stringify(partidos[partidoIndex], null, 2));
     
-    // Asignar las estadísticas directamente
+    // Asignar las estadísticas de equipo
     partidos[partidoIndex].estadisticas = estadisticas;
+    // Asignar estadísticas individuales si vienen
+    if (Array.isArray(estadisticasJugadores)) {
+      partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores.map((j) => ({
+        nombreJugador: (j.nombreJugador || j.nombre || '').toString(),
+        equipo: j.equipo === 'visitante' ? 'visitante' : 'local',
+        hits: parseInt(j.hits) || 0,
+        catches: parseInt(j.catches) || 0,
+        dodges: parseInt(j.dodges) || 0,
+        bloqueos: parseInt(j.bloqueos) || 0,
+        quemados: parseInt(j.quemados) || 0,
+        tarjetasAmarillas: parseInt(j.tarjetasAmarillas) || 0,
+        tarjetasRojas: parseInt(j.tarjetasRojas) || 0
+      }));
+    }
     
     // Actualizar el evento con los nuevos datos
     evento.datosEspecificos = datosEspecificos;
@@ -1258,6 +1274,81 @@ const procesarHojaCalculoEstadisticas = async (req, res) => {
     };
     await evento.save();
 
+    // Actualizar estadísticas generales de jugadores desde el resumen
+    let jugadoresActualizados = 0;
+    let jugadoresNoEncontrados = [];
+    try {
+      const resumen = evento.datosEspecificos?.liga?.resumenEstadisticas;
+      if (resumen?.categories) {
+        const totalPorJugador = {};
+        for (const dataCat of Object.values(resumen.categories)) {
+          for (const [jug, info] of Object.entries(dataCat.jugadores || {})) {
+            if (!totalPorJugador[jug]) totalPorJugador[jug] = {};
+            for (const [k, v] of Object.entries(info.totals || {})) {
+              totalPorJugador[jug][k] = (totalPorJugador[jug][k] || 0) + (Number(v) || 0);
+            }
+          }
+        }
+
+        const normalize = (s) => (s || '')
+          .toString()
+          .normalize('NFD')
+          .replace(/\p{Diacritic}+/gu, '')
+          .toLowerCase()
+          .trim();
+
+        const jugadoresDocs = await Jugador.find({ activo: true }).lean(false);
+        const index = new Map();
+        for (const j of jugadoresDocs) {
+          index.set(normalize(j.nombre), j);
+          index.set(normalize(`${j.nombre} ${j.apellido}`), j);
+        }
+
+        const keyMap = {
+          tirosTotales: 'tirosTotales',
+          hits: 'hits',
+          quemados: 'quemados',
+          asistencias: 'asistencias',
+          tirosRecibidos: 'tirosRecibidos',
+          tirosRecibidosAcertados: 'hitsRecibidos',
+          esquives: 'esquives',
+          esquivesSinEsfuerzo: 'esquivesExitosos',
+          ponchado: 'ponchado',
+          catches: 'catches',
+          catchesIntentos: 'catchesIntentos',
+          catchesRecibidos: 'catchesRecibidos',
+          bloqueos: 'bloqueos',
+          bloqueosIntentos: 'bloqueosIntentos',
+          tarjetasAmarillas: 'tarjetasAmarillas',
+          tarjetasRojas: 'tarjetasRojas',
+          pisoLinea: 'pisoLinea',
+          setsJugados: 'setsJugados',
+          indiceAtaque: 'indiceAtaque',
+          indiceDefensa: 'indiceDefensa',
+          ponderadorSet: 'puntos'
+        };
+
+        for (const [jugadorNombre, totals] of Object.entries(totalPorJugador)) {
+          const doc = index.get(normalize(jugadorNombre));
+          if (!doc) {
+            jugadoresNoEncontrados.push(jugadorNombre);
+            continue;
+          }
+          const eg = doc.estadisticasGenerales || {};
+          for (const [k, v] of Object.entries(totals)) {
+            const field = keyMap[k];
+            if (!field) continue;
+            eg[field] = (eg[field] || 0) + (Number(v) || 0);
+          }
+          doc.estadisticasGenerales = eg;
+          await doc.save();
+          jugadoresActualizados++;
+        }
+      }
+    } catch (e) {
+      console.error('Error actualizando jugadores desde resumen:', e);
+    }
+
     // Eliminar el archivo temporal
     try {
       fs.unlinkSync(filePath);
@@ -1272,7 +1363,9 @@ const procesarHojaCalculoEstadisticas = async (req, res) => {
         partidosActualizados,
         partidosNoEncontrados: partidosNoEncontrados.length > 0 ? partidosNoEncontrados : undefined,
         errores: errores.length > 0 ? errores : undefined,
-        totalFilas: data.length
+        totalFilas: data.length,
+        jugadoresActualizados,
+        jugadoresNoEncontrados: jugadoresNoEncontrados.length ? jugadoresNoEncontrados : undefined
       }
     });
 
@@ -1332,6 +1425,71 @@ const previsualizarHojaCalculoEstadisticas = async (req, res) => {
   }
 };
 
+// Obtener jugadores de los equipos de un evento (por nombre de equipo)
+const obtenerJugadoresEvento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const evento = await Evento.findById(id)
+      .populate('equipos.integrantes', 'nombre apellido')
+      .lean();
+    if (!evento) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+    const nombresEquipos = (evento.datosEspecificos?.liga?.equipos || []).map(e => e.nombre).filter(Boolean);
+    if (!nombresEquipos.length) {
+      return res.json({ success: true, data: { equipos: [] } });
+    }
+
+    const equiposDocs = await Equipo.find({ nombre: { $in: nombresEquipos } })
+      .populate('jugadores.jugador', 'nombre apellido')
+      .lean();
+
+    const equiposMap = new Map();
+    // From Equipo model (Jugador)
+    for (const eq of equiposDocs) {
+      const list = (eq.jugadores || [])
+        .filter(j => j.jugador)
+        .map(j => ({
+          id: j.jugador._id,
+          nombre: j.jugador.nombre,
+          apellido: j.jugador.apellido,
+          nombreCompleto: `${j.jugador.nombre} ${j.jugador.apellido}`.trim(),
+          numeroCamiseta: j.numeroCamiseta || null,
+          posicion: j.posicion || null
+        }));
+      equiposMap.set(eq.nombre, list);
+    }
+
+    // From Evento.equipos (Usuario) as fallback
+    for (const eq of (evento.equipos || [])) {
+      if (!eq?.nombre) continue;
+      const existentes = equiposMap.get(eq.nombre) || [];
+      const adicionales = (eq.integrantes || []).map(u => ({
+        id: u._id,
+        nombre: u.nombre,
+        apellido: u.apellido,
+        nombreCompleto: `${u.nombre || ''} ${u.apellido || ''}`.trim(),
+        numeroCamiseta: null,
+        posicion: null
+      }));
+      // Merge por nombreCompleto para evitar duplicados
+      const byName = new Map(existentes.map(p => [p.nombreCompleto.toLowerCase(), p]));
+      for (const p of adicionales) {
+        const key = p.nombreCompleto.toLowerCase();
+        if (!byName.has(key)) byName.set(key, p);
+      }
+      equiposMap.set(eq.nombre, Array.from(byName.values()));
+    }
+
+    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, jugadores }));
+
+    return res.json({ success: true, data: { equipos } });
+  } catch (error) {
+    console.error('Error al obtener jugadores del evento:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 module.exports = {
   obtenerEventos,
   obtenerEvento,
@@ -1354,5 +1512,6 @@ module.exports = {
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
   procesarHojaCalculoEstadisticas,
-  previsualizarHojaCalculoEstadisticas
+  previsualizarHojaCalculoEstadisticas,
+  obtenerJugadoresEvento
 };
