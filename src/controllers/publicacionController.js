@@ -1,4 +1,5 @@
 const Publicacion = require('../models/Publicacion');
+const Usuario = require('../models/Usuario');
 
 // Obtener todas las publicaciones
 const obtenerPublicaciones = async (req, res) => {
@@ -92,14 +93,39 @@ const obtenerPublicacion = async (req, res) => {
 const crearPublicacion = async (req, res) => {
   try {
     const { titulo, contenido, resumen, categoria, etiquetas, destacada } = req.body;
-    const autorId = req.usuario.id;
+    const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
+    let autorId = req.usuario?.id || process.env.DEFAULT_AUTHOR_ID;
+
+    if (!autorId && allowUnauth) {
+      // Buscar o crear un usuario del sistema para autor por defecto
+      const defaultEmail = process.env.DEFAULT_AUTHOR_EMAIL || 'sistema@dodgeball.local';
+      let autor = await Usuario.findOne({ email: defaultEmail });
+      if (!autor) {
+        autor = new Usuario({
+          nombre: process.env.DEFAULT_AUTHOR_NAME || 'Sistema',
+          email: defaultEmail,
+          password: process.env.DEFAULT_AUTHOR_PASSWORD || 'cambiar123',
+          rol: 'admin',
+          activo: true
+        });
+        await autor.save();
+      }
+      autorId = autor._id;
+    }
+
+    if (!autorId && !allowUnauth) {
+      return res.status(401).json({
+        success: false,
+        message: 'No autorizado'
+      });
+    }
 
     const publicacion = new Publicacion({
       titulo,
       contenido,
       resumen,
       categoria,
-      etiquetas: etiquetas || [],
+      etiquetas: Array.isArray(etiquetas) ? etiquetas : (etiquetas ? [etiquetas] : []),
       destacada: destacada || false,
       autor: autorId,
       imagen: req.file ? req.file.path : ''
