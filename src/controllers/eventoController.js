@@ -1238,8 +1238,24 @@ const procesarHojaCalculoEstadisticas = async (req, res) => {
       }
     }
 
-    // Actualizar el evento
-    evento.datosEspecificos = datosEspecificos;
+    // Generar y guardar resumen por categoría/equipo/jugador
+    try {
+      const resumen = buildSummaryFromRows(data);
+      if (!evento.datosEspecificos) evento.datosEspecificos = {};
+      if (!evento.datosEspecificos.liga) evento.datosEspecificos.liga = {};
+      evento.datosEspecificos.liga.resumenEstadisticas = resumen;
+    } catch (e) {
+      console.warn('No se pudo generar resumen de estadísticas:', e.message);
+    }
+
+    // Actualizar el evento (partidos + resumen)
+    evento.datosEspecificos = {
+      ...(evento.datosEspecificos || {}),
+      liga: {
+        ...((evento.datosEspecificos || {}).liga || {}),
+        ...(datosEspecificos.liga || {})
+      }
+    };
     await evento.save();
 
     // Eliminar el archivo temporal

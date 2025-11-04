@@ -166,7 +166,9 @@ const eventoSchema = new mongoose.Schema({
         posicion: Number,
         premio: String,
         valor: Number
-      }]
+      }],
+      // Resumen agregado desde planillas: categorias -> { equipos, jugadores }
+      resumenEstadisticas: mongoose.Schema.Types.Mixed
     },
     
     // Para campeonatos
