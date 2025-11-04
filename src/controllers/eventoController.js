@@ -1165,6 +1165,12 @@ const actualizarEstadisticasLigaManual = async (req, res) => {
       const n = parseFloat(str);
       return isNaN(n) ? 0 : Math.round(n);
     };
+    const normalizeFloat = (v) => {
+      if (v === null || v === undefined) return 0;
+      const str = String(v).replace('%', '').replace(',', '.');
+      const n = parseFloat(str);
+      return isNaN(n) ? 0 : n;
+    };
 
     const sanitized = Array.isArray(jugadores) ? jugadores.map((j) => ({
       equipoNombre: (j.equipoNombre || j.equipo || '').toString(),
@@ -1185,7 +1191,8 @@ const actualizarEstadisticasLigaManual = async (req, res) => {
       bloqueosIntentos: normalizeInt(j.bloqueosIntentos),
       bloqueos: normalizeInt(j.bloqueos),
       pisoLinea: normalizeInt(j.pisoLinea),
-      catchesRecibidos: normalizeInt(j.catchesRecibidos)
+      catchesRecibidos: normalizeInt(j.catchesRecibidos),
+      poderLiga: normalizeFloat(j.poderLiga)
     })) : [];
 
     evento.datosEspecificos.liga.estadisticasLiga = sanitized;

@@ -150,7 +150,8 @@ const eventoSchema = new mongoose.Schema({
         bloqueosIntentos: { type: Number, default: 0 },
         bloqueos: { type: Number, default: 0 },
         pisoLinea: { type: Number, default: 0 },
-        catchesRecibidos: { type: Number, default: 0 }
+        catchesRecibidos: { type: Number, default: 0 },
+        poderLiga: { type: Number, default: 0 }
       }],
       partidos: [{
         fecha: Date,
