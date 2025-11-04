@@ -947,9 +947,16 @@ const actualizarEstadisticasPartido = async (req, res) => {
     partidos[partidoIndex].estadisticas = estadisticas;
     // Asignar estadísticas individuales si vienen
     if (Array.isArray(estadisticasJugadores)) {
-      partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores.map((j) => ({
-        nombreJugador: (j.nombreJugador || j.nombre || '').toString(),
-        equipo: j.equipo === 'visitante' ? 'visitante' : 'local',
+      const norm = (s) => (s || '').toString().normalize('NFD').replace(/\p{Diacritic}+/gu, '').toLowerCase().trim();
+      const localN = norm(partidos[partidoIndex].equipoLocal || '');
+      const visN = norm(partidos[partidoIndex].equipoVisitante || '');
+      partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores.map((j) => {
+        const equipoInput = (j.equipo || j.equipoNombre || '').toString();
+        const eqN = norm(equipoInput);
+        const mapped = j.equipo === 'visitante' || eqN === visN ? 'visitante' : (j.equipo === 'local' || eqN === localN ? 'local' : 'local');
+        return {
+          nombreJugador: (j.nombreJugador || j.nombre || '').toString(),
+          equipo: mapped,
         hits: parseInt(j.hits) || 0,
         catches: parseInt(j.catches) || 0,
         dodges: parseInt(j.dodges) || 0,
@@ -957,7 +964,8 @@ const actualizarEstadisticasPartido = async (req, res) => {
         quemados: parseInt(j.quemados) || 0,
         tarjetasAmarillas: parseInt(j.tarjetasAmarillas) || 0,
         tarjetasRojas: parseInt(j.tarjetasRojas) || 0
-      }));
+        };
+      });
     }
     
     // Actualizar el evento con los nuevos datos
