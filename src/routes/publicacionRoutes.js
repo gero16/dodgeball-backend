@@ -25,10 +25,12 @@ const allowUnauthCreate = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
 const authOrBypassCreate = (req, res, next) => allowUnauthCreate ? next() : auth(req, res, next);
 const validateOrBypassPublicacion = (req, res, next) => allowUnauthCreate ? next() : validatePublicacion(req, res, next);
 
-// Rutas protegidas
+// Rutas protegidas (bypass si ALLOW_UNAUTH_PUBLICATIONS=true)
 router.post('/crear', authOrBypassCreate, upload.single('imagen'), handleUploadError, validateOrBypassPublicacion, crearPublicacion);
-router.put('/:id', auth, upload.single('imagen'), handleUploadError, validatePublicacion, actualizarPublicacion);
-router.delete('/:id', auth, eliminarPublicacion);
+
+router.put('/:id', authOrBypassCreate, upload.single('imagen'), handleUploadError, validateOrBypassPublicacion, actualizarPublicacion);
+
+router.delete('/:id', authOrBypassCreate, eliminarPublicacion);
 router.post('/:id/comentarios', auth, agregarComentario);
 
 module.exports = router;

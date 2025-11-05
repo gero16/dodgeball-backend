@@ -151,12 +151,18 @@ const actualizarPublicacion = async (req, res) => {
       });
     }
 
-    // Verificar permisos (autor o admin)
-    if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'No tienes permisos para editar esta publicación'
-      });
+    const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
+    // Verificar permisos (autor o admin) a menos que esté habilitado el bypass
+    if (!allowUnauth) {
+      if (!req.usuario) {
+        return res.status(401).json({ success: false, message: 'No autorizado' });
+      }
+      if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permisos para editar esta publicación'
+        });
+      }
     }
 
     // Actualizar campos
@@ -189,7 +195,8 @@ const actualizarPublicacion = async (req, res) => {
 const eliminarPublicacion = async (req, res) => {
   try {
     const { id } = req.params;
-    const usuarioId = req.usuario.id;
+    const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
+    const usuarioId = req.usuario?.id;
 
     const publicacion = await Publicacion.findById(id);
     if (!publicacion) {
@@ -199,12 +206,17 @@ const eliminarPublicacion = async (req, res) => {
       });
     }
 
-    // Verificar permisos (autor o admin)
-    if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'No tienes permisos para eliminar esta publicación'
-      });
+    // Verificar permisos (autor o admin) salvo bypass
+    if (!allowUnauth) {
+      if (!req.usuario) {
+        return res.status(401).json({ success: false, message: 'No autorizado' });
+      }
+      if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permisos para eliminar esta publicación'
+        });
+      }
     }
 
     // Desactivar en lugar de eliminar
