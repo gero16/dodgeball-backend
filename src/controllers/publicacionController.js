@@ -92,7 +92,7 @@ const obtenerPublicacion = async (req, res) => {
 // Crear nueva publicación
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada } = req.body;
+    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY } = req.body;
     const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
     let autorId = req.usuario?.id || process.env.DEFAULT_AUTHOR_ID;
 
@@ -116,7 +116,8 @@ const crearPublicacion = async (req, res) => {
       etiquetas: Array.isArray(etiquetas) ? etiquetas : (etiquetas ? [etiquetas] : []),
       destacada: destacada || false,
       autor: autorId,
-      imagen: req.file ? req.file.path : ''
+      imagen: req.file ? req.file.path : '',
+      imagenPosY: Number.isFinite(parseInt(imagenPosY)) ? Math.max(0, Math.min(100, parseInt(imagenPosY))) : 50
     });
 
     await publicacion.save();
@@ -140,7 +141,7 @@ const crearPublicacion = async (req, res) => {
 const actualizarPublicacion = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada } = req.body;
+    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY } = req.body;
     const usuarioId = req.usuario.id;
 
     const publicacion = await Publicacion.findById(id);
@@ -172,6 +173,10 @@ const actualizarPublicacion = async (req, res) => {
     if (categoria) publicacion.categoria = categoria;
     if (etiquetas) publicacion.etiquetas = etiquetas;
     if (destacada !== undefined) publicacion.destacada = destacada;
+    if (imagenPosY !== undefined) {
+      const val = parseInt(imagenPosY);
+      if (Number.isFinite(val)) publicacion.imagenPosY = Math.max(0, Math.min(100, val));
+    }
     if (req.file) publicacion.imagen = req.file.path;
 
     await publicacion.save();

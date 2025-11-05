@@ -70,6 +70,10 @@ const validatePublicacion = [
     .optional()
     .isArray()
     .withMessage('Las etiquetas deben ser un array'),
+  body('imagenPosY')
+    .optional()
+    .isInt({ min: 0, max: 100 })
+    .withMessage('imagenPosY debe estar entre 0 y 100'),
   
   handleValidationErrors
 ];

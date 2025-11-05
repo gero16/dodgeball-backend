@@ -19,6 +19,12 @@ const publicacionSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  imagenPosY: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 50
+  },
   categoria: {
     type: String,
     required: [true, 'La categoría es obligatoria'],
