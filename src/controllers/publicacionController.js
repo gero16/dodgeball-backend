@@ -142,7 +142,7 @@ const actualizarPublicacion = async (req, res) => {
   try {
     const { id } = req.params;
     const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY } = req.body;
-    const usuarioId = req.usuario.id;
+    const usuarioId = req.usuario?.id;
 
     const publicacion = await Publicacion.findById(id);
     if (!publicacion) {
