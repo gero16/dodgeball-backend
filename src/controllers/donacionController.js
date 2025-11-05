@@ -428,6 +428,90 @@ const webhookMercadoPago = async (req, res) => {
   }
 };
 
+// Listar donaciones de Mercado Pago (público, sin auth, para admin simple)
+const listarDonacionesMPPublic = async (req, res) => {
+  try {
+    const {
+      pagina = 1,
+      limite = 20,
+      estado = '',
+      fechaInicio = '',
+      fechaFin = ''
+    } = req.query;
+
+    const skip = (parseInt(pagina) - 1) * parseInt(limite);
+    const filtros = { metodoPago: 'mercadopago' };
+
+    if (estado) filtros.estado = estado;
+    if (fechaInicio || fechaFin) {
+      filtros.createdAt = {};
+      if (fechaInicio) filtros.createdAt.$gte = new Date(fechaInicio);
+      if (fechaFin) filtros.createdAt.$lte = new Date(fechaFin);
+    }
+
+    const donaciones = await Donacion.find(filtros)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limite));
+
+    const total = await Donacion.countDocuments(filtros);
+
+    res.json({
+      success: true,
+      data: {
+        donaciones,
+        paginacion: {
+          pagina: parseInt(pagina),
+          limite: parseInt(limite),
+          total,
+          paginas: Math.ceil(total / parseInt(limite))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al listar donaciones MP:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
+// Estadísticas rápidas de Mercado Pago (público)
+const statsDonacionesMPPublic = async (req, res) => {
+  try {
+    const [sumario] = await Donacion.aggregate([
+      { $match: { metodoPago: 'mercadopago' } },
+      {
+        $group: {
+          _id: '$estado',
+          count: { $sum: 1 },
+          totalMonto: { $sum: '$monto' }
+        }
+      }
+    ]);
+
+    const totalCompletadas = await Donacion.aggregate([
+      { $match: { metodoPago: 'mercadopago', estado: 'completada' } },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          totalMonto: { $sum: '$monto' }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        sumarioPorEstado: sumario ? [sumario] : [],
+        completadas: totalCompletadas[0] || { count: 0, totalMonto: 0 }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas MP:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 module.exports = {
   crearDonacion,
   obtenerDonaciones,
@@ -436,5 +520,7 @@ module.exports = {
   obtenerEstadisticas,
   procesarPagoPayPal,
   crearPreferenciaMercadoPago,
-  webhookMercadoPago
+  webhookMercadoPago,
+  listarDonacionesMPPublic,
+  statsDonacionesMPPublic
 };
