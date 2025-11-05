@@ -34,16 +34,25 @@ app.use(compression());
 // Middleware de logging
 app.use(morgan('combined'));
 
-// Rate limiting
+// Rate limiting (relajar para GETs y health)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 100, // máximo 100 requests por IP por ventana
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req, res) => req.method === 'GET' || req.path === '/api/health',
   message: {
     success: false,
     message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.'
   }
 });
-app.use(limiter);
+// Aplicar limitador solo a métodos de escritura
+app.use((req, res, next) => {
+  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE' || req.method === 'PATCH') {
+    return limiter(req, res, next);
+  }
+  next();
+});
 
 // Configuración de CORS para permitir múltiples orígenes
 const allowedOrigins = [
