@@ -7,7 +7,7 @@ const crearDonacion = async (req, res) => {
     const {
       donante,
       monto,
-      moneda = 'USD',
+      moneda = (process.env.DEFAULT_DONATION_CURRENCY || 'UYU'),
       metodoPago,
       mensaje,
       proposito = 'general'
@@ -280,7 +280,7 @@ const crearPreferenciaMercadoPago = async (req, res) => {
     const {
       donante,
       monto,
-      moneda = 'USD',
+      moneda = (process.env.DEFAULT_DONATION_CURRENCY || 'UYU'),
       mensaje,
       proposito = 'general'
     } = req.body;

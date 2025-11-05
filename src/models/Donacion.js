@@ -30,7 +30,7 @@ const donacionSchema = new mongoose.Schema({
   moneda: {
     type: String,
     default: 'USD',
-    enum: ['USD', 'EUR', 'MXN', 'CLP']
+    enum: ['USD', 'EUR', 'MXN', 'CLP', 'ARS', 'UYU']
   },
   metodoPago: {
     type: String,
