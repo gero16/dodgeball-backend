@@ -10,7 +10,11 @@ const {
   crearPreferenciaMercadoPago,
   webhookMercadoPago,
   listarDonacionesMPPublic,
-  statsDonacionesMPPublic
+  statsDonacionesMPPublic,
+  crearOrdenPayPal,
+  capturarOrdenPayPal,
+  listarDonacionesPayPalPublic,
+  statsDonacionesPayPalPublic
 } = require('../controllers/donacionController');
 const { auth, adminAuth } = require('../middleware/auth');
 const { validateDonacion } = require('../middleware/validation');
@@ -23,6 +27,12 @@ router.post('/mercadopago/webhook', webhookMercadoPago);
 router.get('/mercadopago/webhook', webhookMercadoPago);
 router.get('/mercadopago/listar', listarDonacionesMPPublic);
 router.get('/mercadopago/estadisticas', statsDonacionesMPPublic);
+
+// PayPal
+router.post('/paypal/create-order', crearOrdenPayPal);
+router.post('/paypal/capture', capturarOrdenPayPal);
+router.get('/paypal/listar', listarDonacionesPayPalPublic);
+router.get('/paypal/estadisticas', statsDonacionesPayPalPublic);
 
 // Rutas protegidas (admin)
 router.get('/', adminAuth, obtenerDonaciones);

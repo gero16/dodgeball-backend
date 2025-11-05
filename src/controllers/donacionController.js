@@ -1,5 +1,6 @@
 const Donacion = require('../models/Donacion');
 const axios = require('axios');
+const paypal = require('@paypal/checkout-server-sdk');
 
 // Crear nueva donación
 const crearDonacion = async (req, res) => {
@@ -428,6 +429,128 @@ const webhookMercadoPago = async (req, res) => {
   }
 };
 
+// === PayPal Helpers ===
+const getPayPalClient = () => {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const env = (process.env.PAYPAL_ENV || 'sandbox').toLowerCase();
+  const environment = env === 'live'
+    ? new paypal.core.LiveEnvironment(clientId, clientSecret)
+    : new paypal.core.SandboxEnvironment(clientId, clientSecret);
+  return new paypal.core.PayPalHttpClient(environment);
+};
+
+// Crear orden de PayPal para donación
+const crearOrdenPayPal = async (req, res) => {
+  try {
+    const {
+      donante,
+      monto,
+      moneda = (process.env.DEFAULT_DONATION_CURRENCY || 'UYU'),
+      mensaje,
+      proposito = 'general'
+    } = req.body;
+
+    if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
+      return res.status(500).json({ success: false, message: 'Configurar PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET' });
+    }
+
+    const donacion = new Donacion({
+      donante,
+      monto,
+      moneda,
+      metodoPago: 'paypal',
+      mensaje,
+      proposito,
+      estado: 'pendiente'
+    });
+    await donacion.save();
+
+    const transaccionId = `DON-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    donacion.transaccionId = transaccionId;
+    await donacion.save();
+
+    const backendBaseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    const request = new paypal.orders.OrdersCreateRequest();
+    request.prefer('return=representation');
+    request.requestBody({
+      intent: 'CAPTURE',
+      purchase_units: [
+        {
+          amount: {
+            currency_code: moneda,
+            value: Number(monto).toFixed(2)
+          },
+          description: mensaje || 'Donación voluntaria',
+          reference_id: transaccionId
+        }
+      ],
+      application_context: {
+        brand_name: 'Dodgeball',
+        user_action: 'PAY_NOW',
+        return_url: `${frontendBaseUrl}/donar?pp_status=success&ref=${encodeURIComponent(transaccionId)}`,
+        cancel_url: `${frontendBaseUrl}/donar?pp_status=cancel&ref=${encodeURIComponent(transaccionId)}`
+      }
+    });
+
+    const client = getPayPalClient();
+    const order = await client.execute(request);
+    const orderId = order.result.id;
+    donacion.paypalOrderId = orderId;
+    await donacion.save();
+
+    const approveLink = (order.result.links || []).find(l => l.rel === 'approve')?.href;
+
+    return res.status(201).json({
+      success: true,
+      message: 'Orden de PayPal creada',
+      data: { transaccionId, orderId, approveUrl: approveLink }
+    });
+  } catch (error) {
+    console.error('Error al crear orden PayPal:', error?.message || error);
+    return res.status(500).json({ success: false, message: 'No se pudo crear la orden de PayPal' });
+  }
+};
+
+// Capturar orden de PayPal
+const capturarOrdenPayPal = async (req, res) => {
+  try {
+    const { orderId, transaccionId } = req.body;
+    if (!orderId || !transaccionId) {
+      return res.status(400).json({ success: false, message: 'orderId y transaccionId son requeridos' });
+    }
+
+    const donacion = await Donacion.findOne({ transaccionId, paypalOrderId: orderId });
+    if (!donacion) {
+      return res.status(404).json({ success: false, message: 'Donación no encontrada' });
+    }
+
+    const request = new paypal.orders.OrdersCaptureRequest(orderId);
+    request.requestBody({});
+
+    const client = getPayPalClient();
+    const capture = await client.execute(request);
+
+    const status = capture?.result?.status || 'COMPLETED';
+    if (status === 'COMPLETED') {
+      donacion.estado = 'completada';
+      donacion.fechaPago = new Date();
+      donacion.procesado = true;
+      donacion.fechaProcesamiento = new Date();
+    } else {
+      donacion.estado = 'procesando';
+    }
+    await donacion.save();
+
+    return res.json({ success: true, message: 'Orden capturada', data: { donacion } });
+  } catch (error) {
+    console.error('Error al capturar PayPal:', error?.message || error);
+    return res.status(500).json({ success: false, message: 'No se pudo capturar la orden de PayPal' });
+  }
+};
+
 // Listar donaciones de Mercado Pago (público, sin auth, para admin simple)
 const listarDonacionesMPPublic = async (req, res) => {
   try {
@@ -512,6 +635,45 @@ const statsDonacionesMPPublic = async (req, res) => {
   }
 };
 
+// Listar donaciones PayPal (público)
+const listarDonacionesPayPalPublic = async (req, res) => {
+  try {
+    const { pagina = 1, limite = 20, estado = '', fechaInicio = '', fechaFin = '' } = req.query;
+    const skip = (parseInt(pagina) - 1) * parseInt(limite);
+    const filtros = { metodoPago: 'paypal' };
+    if (estado) filtros.estado = estado;
+    if (fechaInicio || fechaFin) {
+      filtros.createdAt = {};
+      if (fechaInicio) filtros.createdAt.$gte = new Date(fechaInicio);
+      if (fechaFin) filtros.createdAt.$lte = new Date(fechaFin);
+    }
+    const donaciones = await Donacion.find(filtros).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limite));
+    const total = await Donacion.countDocuments(filtros);
+    res.json({ success: true, data: { donaciones, paginacion: { pagina: parseInt(pagina), limite: parseInt(limite), total, paginas: Math.ceil(total / parseInt(limite)) } } });
+  } catch (error) {
+    console.error('Error al listar donaciones PayPal:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
+// Estadísticas PayPal (público)
+const statsDonacionesPayPalPublic = async (req, res) => {
+  try {
+    const porEstado = await Donacion.aggregate([
+      { $match: { metodoPago: 'paypal' } },
+      { $group: { _id: '$estado', count: { $sum: 1 }, totalMonto: { $sum: '$monto' } } }
+    ]);
+    const completadas = await Donacion.aggregate([
+      { $match: { metodoPago: 'paypal', estado: 'completada' } },
+      { $group: { _id: null, count: { $sum: 1 }, totalMonto: { $sum: '$monto' } } }
+    ]);
+    res.json({ success: true, data: { porEstado, completadas: completadas[0] || { count: 0, totalMonto: 0 } } });
+  } catch (error) {
+    console.error('Error stats PayPal:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
 module.exports = {
   crearDonacion,
   obtenerDonaciones,
@@ -522,5 +684,9 @@ module.exports = {
   crearPreferenciaMercadoPago,
   webhookMercadoPago,
   listarDonacionesMPPublic,
-  statsDonacionesMPPublic
+  statsDonacionesMPPublic,
+  crearOrdenPayPal,
+  capturarOrdenPayPal,
+  listarDonacionesPayPalPublic,
+  statsDonacionesPayPalPublic
 };
