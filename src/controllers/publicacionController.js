@@ -92,7 +92,7 @@ const obtenerPublicacion = async (req, res) => {
 // Crear nueva publicación
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY } = req.body;
+    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
     const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
     let autorId = req.usuario?.id || process.env.DEFAULT_AUTHOR_ID;
 
@@ -117,7 +117,8 @@ const crearPublicacion = async (req, res) => {
       destacada: destacada || false,
       autor: autorId,
       imagen: req.file ? req.file.path : '',
-      imagenPosY: Number.isFinite(parseInt(imagenPosY)) ? Math.max(0, Math.min(100, parseInt(imagenPosY))) : 50
+      imagenPosY: Number.isFinite(parseInt(imagenPosY)) ? Math.max(0, Math.min(100, parseInt(imagenPosY))) : 50,
+      ...(fechaPublicacion ? { fechaPublicacion: new Date(fechaPublicacion) } : {})
     });
 
     await publicacion.save();
@@ -141,7 +142,7 @@ const crearPublicacion = async (req, res) => {
 const actualizarPublicacion = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY } = req.body;
+    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
     const usuarioId = req.usuario?.id;
 
     const publicacion = await Publicacion.findById(id);
@@ -176,6 +177,10 @@ const actualizarPublicacion = async (req, res) => {
     if (imagenPosY !== undefined) {
       const val = parseInt(imagenPosY);
       if (Number.isFinite(val)) publicacion.imagenPosY = Math.max(0, Math.min(100, val));
+    }
+    if (fechaPublicacion !== undefined) {
+      const d = new Date(fechaPublicacion);
+      if (!isNaN(d.getTime())) publicacion.fechaPublicacion = d;
     }
     if (req.file) publicacion.imagen = req.file.path;
 

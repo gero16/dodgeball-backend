@@ -74,6 +74,10 @@ const validatePublicacion = [
     .optional()
     .isInt({ min: 0, max: 100 })
     .withMessage('imagenPosY debe estar entre 0 y 100'),
+  body('fechaPublicacion')
+    .optional()
+    .isISO8601()
+    .withMessage('La fecha de publicación debe ser válida (ISO 8601)'),
   
   handleValidationErrors
 ];
