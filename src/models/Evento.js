@@ -159,6 +159,7 @@ const eventoSchema = new mongoose.Schema({
         equipoVisitante: String,
         golesLocal: Number,
         golesVisitante: Number,
+        youtubeUrl: String,
         estado: {
           type: String,
           enum: ['programado', 'en-curso', 'finalizado', 'cancelado'],
