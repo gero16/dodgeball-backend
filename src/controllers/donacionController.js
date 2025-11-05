@@ -1,4 +1,5 @@
 const Donacion = require('../models/Donacion');
+const axios = require('axios');
 
 // Crear nueva donación
 const crearDonacion = async (req, res) => {
@@ -273,11 +274,167 @@ const procesarPagoPayPal = async (req, res) => {
   }
 };
 
+// Crear preferencia de Mercado Pago para donación
+const crearPreferenciaMercadoPago = async (req, res) => {
+  try {
+    const {
+      donante,
+      monto,
+      moneda = 'USD',
+      mensaje,
+      proposito = 'general'
+    } = req.body;
+
+    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        message: 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en el servidor'
+      });
+    }
+
+    // Crear registro de donación en estado pendiente
+    const donacion = new Donacion({
+      donante,
+      monto,
+      moneda,
+      metodoPago: 'mercadopago',
+      mensaje,
+      proposito,
+      estado: 'pendiente'
+    });
+    await donacion.save();
+
+    // Generar ID de transacción único y guardar
+    const transaccionId = `DON-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    donacion.transaccionId = transaccionId;
+    await donacion.save();
+
+    const backendBaseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    const preferencePayload = {
+      items: [
+        {
+          title: 'Donación Dodgeball',
+          description: mensaje || 'Donación voluntaria',
+          quantity: 1,
+          unit_price: Number(monto),
+          currency_id: moneda
+        }
+      ],
+      payer: {
+        name: donante?.nombre,
+        email: donante?.email
+      },
+      external_reference: transaccionId,
+      back_urls: {
+        success: `${frontendBaseUrl}/donar?mp_status=success&ref=${encodeURIComponent(transaccionId)}`,
+        failure: `${frontendBaseUrl}/donar?mp_status=failure&ref=${encodeURIComponent(transaccionId)}`,
+        pending: `${frontendBaseUrl}/donar?mp_status=pending&ref=${encodeURIComponent(transaccionId)}`
+      },
+      auto_return: 'approved',
+      notification_url: `${backendBaseUrl}/api/donaciones/mercadopago/webhook`
+    };
+
+    const resp = await axios.post(
+      'https://api.mercadopago.com/checkout/preferences',
+      preferencePayload,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const preference = resp.data;
+
+    donacion.mercadoPagoPreferenceId = preference.id;
+    await donacion.save();
+
+    return res.status(201).json({
+      success: true,
+      message: 'Preferencia creada exitosamente',
+      data: {
+        transaccionId,
+        preferenceId: preference.id,
+        init_point: preference.init_point,
+        sandbox_init_point: preference.sandbox_init_point || null
+      }
+    });
+  } catch (error) {
+    console.error('Error al crear preferencia MP:', error?.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'No se pudo crear la preferencia de Mercado Pago'
+    });
+  }
+};
+
+// Webhook de Mercado Pago
+const webhookMercadoPago = async (req, res) => {
+  try {
+    // Mercado Pago puede enviar GET o POST dependiendo de la configuración
+    const paymentId = req.query.id || req.query['data.id'] || req.body?.data?.id;
+
+    if (!paymentId) {
+      // Aceptamos igualmente para no reintentar indefinidamente
+      return res.status(200).json({ received: true });
+    }
+
+    // Obtener detalle del pago
+    const payResp = await axios.get(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
+        }
+      }
+    );
+
+    const pago = payResp.data;
+    const transaccionId = pago.external_reference;
+
+    if (!transaccionId) {
+      return res.status(200).json({ processed: false });
+    }
+
+    const donacion = await Donacion.findOne({ transaccionId });
+    if (!donacion) {
+      return res.status(200).json({ processed: false });
+    }
+
+    donacion.mercadoPagoPaymentId = String(pago.id);
+    donacion.mercadoPagoStatus = pago.status;
+
+    if (pago.status === 'approved') {
+      donacion.estado = 'completada';
+      donacion.fechaPago = new Date();
+      donacion.procesado = true;
+      donacion.fechaProcesamiento = new Date();
+    } else if (pago.status === 'in_process' || pago.status === 'pending') {
+      donacion.estado = 'procesando';
+    } else if (pago.status === 'rejected' || pago.status === 'cancelled') {
+      donacion.estado = 'fallida';
+    }
+
+    await donacion.save();
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error en webhook MP:', error?.response?.data || error.message);
+    // Responder 200 para evitar reintentos excesivos, pero loguear el error
+    return res.status(200).json({ success: false });
+  }
+};
+
 module.exports = {
   crearDonacion,
   obtenerDonaciones,
   obtenerDonacion,
   actualizarEstado,
   obtenerEstadisticas,
-  procesarPagoPayPal
+  procesarPagoPayPal,
+  crearPreferenciaMercadoPago,
+  webhookMercadoPago
 };

@@ -190,7 +190,7 @@ const validateDonacion = [
     .withMessage('El monto debe ser mayor a 0'),
   
   body('metodoPago')
-    .isIn(['paypal', 'stripe', 'transferencia'])
+    .isIn(['paypal', 'stripe', 'transferencia', 'mercadopago'])
     .withMessage('Método de pago inválido'),
   
   body('mensaje')

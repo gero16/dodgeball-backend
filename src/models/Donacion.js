@@ -35,7 +35,7 @@ const donacionSchema = new mongoose.Schema({
   metodoPago: {
     type: String,
     required: [true, 'El método de pago es obligatorio'],
-    enum: ['paypal', 'stripe', 'transferencia']
+    enum: ['paypal', 'stripe', 'transferencia', 'mercadopago']
   },
   estado: {
     type: String,
@@ -51,6 +51,18 @@ const donacionSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true
+  },
+  // Datos de Mercado Pago
+  mercadoPagoPreferenceId: {
+    type: String,
+    index: true
+  },
+  mercadoPagoPaymentId: {
+    type: String,
+    index: true
+  },
+  mercadoPagoStatus: {
+    type: String
   },
   mensaje: {
     type: String,
