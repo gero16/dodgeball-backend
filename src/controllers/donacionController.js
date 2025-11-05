@@ -455,10 +455,13 @@ const crearOrdenPayPal = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Configurar PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET' });
     }
 
+    // Forzar moneda soportada por PayPal (p.ej. USD)
+    const paypalCurrency = (process.env.PAYPAL_CURRENCY || 'USD').toUpperCase();
+
     const donacion = new Donacion({
       donante,
       monto,
-      moneda,
+      moneda: paypalCurrency,
       metodoPago: 'paypal',
       mensaje,
       proposito,
@@ -480,7 +483,7 @@ const crearOrdenPayPal = async (req, res) => {
       purchase_units: [
         {
           amount: {
-            currency_code: moneda,
+            currency_code: paypalCurrency,
             value: Number(monto).toFixed(2)
           },
           description: mensaje || 'Donación voluntaria',
