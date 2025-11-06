@@ -10,7 +10,7 @@ const {
   obtenerDestacadas,
   agregarComentario
 } = require('../controllers/publicacionController');
-const { auth } = require('../middleware/auth');
+const { auth, adminAuth } = require('../middleware/auth');
 const { validatePublicacion } = require('../middleware/validation');
 const { upload, handleUploadError } = require('../middleware/upload');
 
@@ -22,7 +22,7 @@ router.get('/destacadas/lista', obtenerDestacadas);
 
 // Permitir omitir auth para crear publicaciones si ALLOW_UNAUTH_PUBLICATIONS=true (solo desarrollo)
 const allowUnauthCreate = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
-const authOrBypassCreate = (req, res, next) => allowUnauthCreate ? next() : auth(req, res, next);
+const authOrBypassCreate = (req, res, next) => allowUnauthCreate ? next() : adminAuth(req, res, next);
 const validateOrBypassPublicacion = (req, res, next) => allowUnauthCreate ? next() : validatePublicacion(req, res, next);
 
 // Rutas protegidas (bypass si ALLOW_UNAUTH_PUBLICATIONS=true)
