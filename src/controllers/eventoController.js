@@ -301,7 +301,7 @@ const crearEvento = async (req, res) => {
       dificultad,
       requisitos,
       datosEspecificos,
-      organizador: req.user.id
+      organizador: req.usuario && (req.usuario.id || req.usuario._id)
     });
 
     const eventoGuardado = await nuevoEvento.save();
