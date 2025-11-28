@@ -125,21 +125,25 @@ const obtenerEventos = async (req, res) => {
       .skip(skip)
       .limit(parseInt(limite));
 
-    // Calcular próxima fecha por evento basándonos en Horarios vinculados
+    // Calcular próxima fecha y si tiene estadísticas para cada evento
     const ahoraISO = new Date();
     const eventos = await Promise.all(eventosDocs.map(async (ev) => {
+      let evObj = ev.toObject();
       try {
         const next = await Horario.findOne({
           evento: ev._id,
           activo: true,
           fecha: { $gte: ahoraISO }
         }).sort({ fecha: 1, horaInicio: 1 }).lean();
-        const evObj = ev.toObject();
         if (next?.fecha) evObj.proximaFecha = next.fecha;
-        return evObj;
+      } catch {}
+      // Nuevo: Tiene estadísticas rápidas
+      try {
+        evObj.tieneEstadisticas = !!(await Estadistica.exists({ evento: ev._id }));
       } catch {
-        return ev;
+        evObj.tieneEstadisticas = false;
       }
+      return evObj;
     }));
 
     const total = await Evento.countDocuments(filtros);
