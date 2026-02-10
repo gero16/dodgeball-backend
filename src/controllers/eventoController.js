@@ -348,7 +348,16 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
       const side = ps?.equipo === 'visitante' ? 'visitante' : 'local';
       const teamKey = side === 'visitante' ? visitKey : localKey;
       const teamDisplay = side === 'visitante' ? visitName : localName;
-      const teamEntry = equipoMaps.get(teamKey);
+      let teamEntry = equipoMaps.get(teamKey);
+      if (!teamEntry && teamDisplay) {
+        const resolvedTeamName = tryMatch(teamDisplay) || teamDisplay;
+        const resolvedKey = normalizeName(resolvedTeamName);
+        teamEntry = equipoMaps.get(resolvedKey);
+      }
+      if (!teamEntry) {
+        teamEntry = { equipoDoc: null, playerNameToId: new Map() };
+        equipoMaps.set(teamKey, teamEntry);
+      }
 
       if (!teamEntry?.equipoDoc?._id) {
         const roster = eventRosterByTeam.get(teamKey) || [];
