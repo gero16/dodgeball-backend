@@ -204,7 +204,32 @@ const eventoSchema = new mongoose.Schema({
             tarjetasAmarillas: { type: Number, default: 0 },
             tarjetasRojas: { type: Number, default: 0 }
           }
-        }
+        },
+        // Estadísticas por jugador para este partido (usado para recalcular ranking de liga)
+        estadisticasJugadores: [{
+          nombreJugador: { type: String, trim: true },
+          // 'local'/'visitante' relativo al partido
+          equipo: { type: String, enum: ['local', 'visitante'], default: 'local' },
+          setsJugados: { type: Number, default: 0 },
+          tirosTotales: { type: Number, default: 0 },
+          hits: { type: Number, default: 0 },
+          quemados: { type: Number, default: 0 },
+          asistencias: { type: Number, default: 0 },
+          tirosRecibidos: { type: Number, default: 0 },
+          hitsRecibidos: { type: Number, default: 0 },
+          // En el frontend se usa 'dodges' como esquives
+          dodges: { type: Number, default: 0 },
+          esquivesExitosos: { type: Number, default: 0 },
+          ponchado: { type: Number, default: 0 },
+          catchesIntentos: { type: Number, default: 0 },
+          catches: { type: Number, default: 0 },
+          bloqueosIntentos: { type: Number, default: 0 },
+          bloqueos: { type: Number, default: 0 },
+          pisoLinea: { type: Number, default: 0 },
+          catchesRecibidos: { type: Number, default: 0 },
+          tarjetasAmarillas: { type: Number, default: 0 },
+          tarjetasRojas: { type: Number, default: 0 }
+        }]
       }],
       reglas: [String],
       premios: [{

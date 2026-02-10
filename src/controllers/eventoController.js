@@ -1,5 +1,6 @@
 const Evento = require('../models/Evento');
 const Estadistica = require('../models/Estadistica');
+<<<<<<< HEAD
 const Horario = require('../models/Horario');
 const XLSX = require('xlsx');
 const Jugador = require('../models/Jugador');
@@ -81,6 +82,191 @@ function buildSummaryFromRows(rows) {
   }
 
   return { categories };
+=======
+const Equipo = require('../models/Equipo');
+const { calcularEstadisticasCompletas } = require('../utils/estadisticas');
+
+const normalizeName = (s) => (s || '')
+  .toString()
+  .normalize('NFD')
+  .replace(/\p{Diacritic}+/gu, '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const escapeRegExp = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function buildEquipoRosterMaps(teamNames = []) {
+  const unique = Array.from(new Set((teamNames || []).map(normalizeName).filter(Boolean)));
+  if (unique.length === 0) return new Map();
+
+  // Buscar equipos por nombre (case-insensitive) con $or de regex exactas
+  const ors = unique.map((n) => ({ nombre: { $regex: `^${escapeRegExp(n)}$`, $options: 'i' } }));
+  const equipos = await Equipo.find({ $or: ors, activo: true })
+    .populate('jugadores.jugador', 'nombre apellido activo')
+    .lean();
+
+  const out = new Map(); // normalizedTeamName -> { equipoDoc, playerNameToId: Map }
+  for (const eq of equipos) {
+    const teamKey = normalizeName(eq.nombre);
+    const map = new Map();
+    const roster = Array.isArray(eq.jugadores) ? eq.jugadores : [];
+    for (const r of roster) {
+      const j = r?.jugador;
+      if (!j || j.activo === false) continue;
+      const full = normalizeName(`${j.nombre || ''} ${j.apellido || ''}`.trim());
+      if (!full) continue;
+      // Si hay duplicados, conservamos el primero
+      if (!map.has(full)) map.set(full, j._id?.toString());
+    }
+    out.set(teamKey, { equipoDoc: eq, playerNameToId: map });
+  }
+  return out;
+}
+
+async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
+  const evento = await Evento.findById(eventoId).lean();
+  if (!evento) {
+    const err = new Error('Evento no encontrado');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const temporada = evento?.datosEspecificos?.liga?.temporada || '2024-2025';
+  const partidos = evento?.datosEspecificos?.liga?.partidos || [];
+  const finalizados = Array.isArray(partidos) ? partidos.filter(p => p?.estado === 'finalizado') : [];
+
+  // Equipos involucrados (para mapear jugador->id dentro del roster del equipo)
+  const teamNames = [];
+  for (const p of finalizados) {
+    if (p?.equipoLocal) teamNames.push(p.equipoLocal);
+    if (p?.equipoVisitante) teamNames.push(p.equipoVisitante);
+  }
+  const equipoMaps = await buildEquipoRosterMaps(teamNames);
+
+  // Acumular por (equipoId, jugadorId)
+  const acc = new Map();
+  const warnings = [];
+
+  const bump = (key, field, value) => {
+    const cur = acc.get(key);
+    cur[field] = (cur[field] || 0) + (parseInt(value, 10) || 0);
+  };
+
+  for (const partido of finalizados) {
+    const localName = partido?.equipoLocal || '';
+    const visitName = partido?.equipoVisitante || '';
+    const localKey = normalizeName(localName);
+    const visitKey = normalizeName(visitName);
+
+    const players = Array.isArray(partido?.estadisticasJugadores) ? partido.estadisticasJugadores : [];
+    for (const ps of players) {
+      const nombreJugador = (ps?.nombreJugador || '').toString().trim();
+      if (!nombreJugador) continue;
+
+      const side = ps?.equipo === 'visitante' ? 'visitante' : 'local';
+      const teamKey = side === 'visitante' ? visitKey : localKey;
+      const teamDisplay = side === 'visitante' ? visitName : localName;
+      const teamEntry = equipoMaps.get(teamKey);
+
+      if (!teamEntry?.equipoDoc?._id) {
+        warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
+        continue;
+      }
+
+      const jugadorKey = normalizeName(nombreJugador);
+      let jugadorId = teamEntry.playerNameToId.get(jugadorKey);
+
+      // Fallback: coincidencia parcial simple dentro del roster del equipo
+      if (!jugadorId) {
+        for (const [full, id] of teamEntry.playerNameToId.entries()) {
+          if (full.includes(jugadorKey) || jugadorKey.includes(full)) {
+            jugadorId = id;
+            break;
+          }
+        }
+      }
+
+      if (!jugadorId) {
+        warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
+        continue;
+      }
+
+      const equipoId = teamEntry.equipoDoc._id.toString();
+      const key = `${equipoId}|${jugadorId}`;
+      if (!acc.has(key)) {
+        acc.set(key, {
+          equipo: equipoId,
+          jugador: jugadorId,
+          evento: evento._id.toString(),
+          temporada,
+          setsJugados: 0,
+          tirosTotales: 0,
+          hits: 0,
+          quemados: 0,
+          asistencias: 0,
+          tirosRecibidos: 0,
+          hitsRecibidos: 0,
+          esquives: 0,
+          esquivesSinEsfuerzo: 0,
+          ponchado: 0,
+          catchesIntentados: 0,
+          catches: 0,
+          bloqueosIntentados: 0,
+          bloqueos: 0,
+          pisoLinea: 0,
+          catchesRecibidos: 0
+        });
+      }
+
+      bump(key, 'setsJugados', ps.setsJugados);
+      bump(key, 'tirosTotales', ps.tirosTotales);
+      bump(key, 'hits', ps.hits);
+      bump(key, 'quemados', ps.quemados);
+      bump(key, 'asistencias', ps.asistencias);
+      bump(key, 'tirosRecibidos', ps.tirosRecibidos);
+      bump(key, 'hitsRecibidos', ps.hitsRecibidos);
+      // Mapeo: frontend usa "dodges" para esquives
+      bump(key, 'esquives', ps.dodges);
+      bump(key, 'esquivesSinEsfuerzo', ps.esquivesExitosos);
+      bump(key, 'ponchado', ps.ponchado);
+      bump(key, 'catchesIntentados', ps.catchesIntentos);
+      bump(key, 'catches', ps.catches);
+      bump(key, 'bloqueosIntentados', ps.bloqueosIntentos);
+      bump(key, 'bloqueos', ps.bloqueos);
+      bump(key, 'pisoLinea', ps.pisoLinea);
+      bump(key, 'catchesRecibidos', ps.catchesRecibidos);
+    }
+  }
+
+  // Reemplazar estadísticas del evento/temporada (determinístico)
+  const docsBase = Array.from(acc.values()).map((d) => {
+    const computed = calcularEstadisticasCompletas(d);
+    return {
+      ...d,
+      porcentajeHits: computed.porcentajeHits || 0,
+      porcentajeOuts: computed.porcentajeOuts || 0,
+      porcentajeCatches: computed.porcentajeCatches || 0,
+      porcentajeBloqueos: computed.porcentajeBloqueos || 0,
+      indiceAtaque: computed.indiceAtaque || 0,
+      indiceDefensa: computed.indiceDefensa || 0,
+      indicePoder: computed.indicePoder || 0,
+      activo: true
+    };
+  });
+
+  await Estadistica.deleteMany({ evento: evento._id, temporada });
+  if (docsBase.length > 0) {
+    await Estadistica.insertMany(docsBase);
+  }
+
+  return {
+    temporada,
+    partidosFinalizados: finalizados.length,
+    estadisticasGeneradas: docsBase.length,
+    warnings
+  };
+>>>>>>> 82c108c (recalcular ranking desde partidos)
 }
 
 // Obtener todos los eventos
@@ -1166,6 +1352,7 @@ const actualizarEstadisticasPartido = async (req, res) => {
     
     // Asignar las estadísticas de equipo
     partidos[partidoIndex].estadisticas = estadisticas;
+<<<<<<< HEAD
     // Asignar estadísticas individuales si vienen
     if (Array.isArray(estadisticasJugadores)) {
       const norm = (s) => (s || '').toString().normalize('NFD').replace(/\p{Diacritic}+/gu, '').toLowerCase().trim();
@@ -1198,6 +1385,10 @@ const actualizarEstadisticasPartido = async (req, res) => {
         tarjetasRojas: parseInt(j.tarjetasRojas) || 0
         };
       });
+=======
+    if (Array.isArray(estadisticasJugadores)) {
+      partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores;
+>>>>>>> 82c108c (recalcular ranking desde partidos)
     }
     
     // Sincronizar roster del evento (plantelNombres) con los jugadores cargados en este partido
@@ -1314,16 +1505,39 @@ const actualizarEstadisticasPartido = async (req, res) => {
     await evento.save();
     console.log('✅ DEBUG - Evento guardado exitosamente');
 
+    // Recalcular ranking/estadísticas de liga desde los partidos (determinístico)
+    let recalculo = null;
+    try {
+      recalculo = await recalcularEstadisticasLigaDesdePartidos(evento._id);
+    } catch (e) {
+      console.error('⚠️ Error recalculando estadísticas de liga:', e);
+    }
+
     res.json({
       success: true,
       message: 'Estadísticas actualizadas exitosamente',
-      data: { evento }
+      data: { evento, recalculo }
     });
   } catch (error) {
     console.error('❌ DEBUG - Error al actualizar estadísticas:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Recalcular estadísticas de liga (ranking) desde partidos finalizados
+const recalcularEstadisticasLiga = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const resultado = await recalcularEstadisticasLigaDesdePartidos(id);
+    res.json({ success: true, message: 'Recalculo completado', data: resultado });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Error interno del servidor'
     });
   }
 };
@@ -2027,6 +2241,7 @@ module.exports = {
   actualizarFixtureLiga,
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
+  recalcularEstadisticasLiga,
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,

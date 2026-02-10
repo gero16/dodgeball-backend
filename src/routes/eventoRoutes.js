@@ -22,12 +22,16 @@ const {
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
+<<<<<<< HEAD
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,
   actualizarEstadisticasLigaManual,
   upsertEstadisticasJugadores,
   migrarEstadisticasLigaAEstadistica
+=======
+  recalcularEstadisticasLiga
+>>>>>>> 82c108c (recalcular ranking desde partidos)
 } = require('../controllers/eventoController');
 
 const { adminAuth } = require('../middleware/auth');
@@ -45,6 +49,7 @@ router.get('/:id/estadisticas/liga', obtenerEstadisticasLiga);
 router.get('/:id/estadisticas/campeonato', obtenerEstadisticasCampeonato);
 router.get('/:id/estadisticas/participacion', obtenerEstadisticasParticipacion);
 router.get('/:id/estadisticas/jugadores', obtenerEstadisticasEvento);
+router.post('/:id/estadisticas/recalcular', recalcularEstadisticasLiga);
 
 // Rutas específicas de campeonatos
 router.get('/:id/fixture', obtenerFixtureCampeonato);
