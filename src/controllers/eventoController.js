@@ -161,6 +161,7 @@ function buildTeamAliasResolver(equiposDb = []) {
 async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado, teamAliasResolver) {
   const parts = (nombreCompleto || '').toString().trim().split(/\s+/);
   if (parts.length === 0) return null;
+  const inputNorm = normalizeName(nombreCompleto);
   const nombre = parts[0];
   const apellido = parts.slice(1).join(' ');
   const nombreRegex = new RegExp(`^${escapeRegExp(nombre)}$`, 'i');
@@ -178,6 +179,20 @@ async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado, team
         { apellido: apellidoRegex || nombreRegex }
       ]
     }).lean();
+  }
+
+  if (!jugador) {
+    // Fallback: buscar candidatos por nombre/apellido y comparar normalizado (maneja tildes)
+    const broadQuery = {
+      activo: true,
+      $or: [
+        { nombre: { $regex: nombreRegex } },
+        { apellido: apellidoRegex || nombreRegex }
+      ]
+    };
+    const candidatos = await Jugador.find(broadQuery).limit(50).lean();
+    const matchExact = candidatos.find((j) => normalizeName(`${j.nombre || ''} ${j.apellido || ''}`.trim()) === inputNorm);
+    jugador = matchExact || null;
   }
 
   if (!jugador) return null;
