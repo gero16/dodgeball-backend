@@ -1,12 +1,12 @@
 const Evento = require('../models/Evento');
 const Estadistica = require('../models/Estadistica');
-<<<<<<< HEAD
 const Horario = require('../models/Horario');
 const XLSX = require('xlsx');
 const Jugador = require('../models/Jugador');
 const Equipo = require('../models/Equipo');
 const fs = require('fs');
 const path = require('path');
+const { calcularEstadisticasCompletas } = require('../utils/estadisticas');
 
 // Utilidad: construir resumen por categoría/equipo/jugador a partir de filas crudas
 function buildSummaryFromRows(rows) {
@@ -82,9 +82,7 @@ function buildSummaryFromRows(rows) {
   }
 
   return { categories };
-=======
-const Equipo = require('../models/Equipo');
-const { calcularEstadisticasCompletas } = require('../utils/estadisticas');
+}
 
 const normalizeName = (s) => (s || '')
   .toString()
@@ -266,7 +264,6 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
     estadisticasGeneradas: docsBase.length,
     warnings
   };
->>>>>>> 82c108c (recalcular ranking desde partidos)
 }
 
 // Obtener todos los eventos
@@ -1352,7 +1349,6 @@ const actualizarEstadisticasPartido = async (req, res) => {
     
     // Asignar las estadísticas de equipo
     partidos[partidoIndex].estadisticas = estadisticas;
-<<<<<<< HEAD
     // Asignar estadísticas individuales si vienen
     if (Array.isArray(estadisticasJugadores)) {
       const norm = (s) => (s || '').toString().normalize('NFD').replace(/\p{Diacritic}+/gu, '').toLowerCase().trim();
@@ -1361,34 +1357,32 @@ const actualizarEstadisticasPartido = async (req, res) => {
       partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores.map((j) => {
         const equipoInput = (j.equipo || j.equipoNombre || '').toString();
         const eqN = norm(equipoInput);
-        const mapped = j.equipo === 'visitante' || eqN === visN ? 'visitante' : (j.equipo === 'local' || eqN === localN ? 'local' : 'local');
+        const mapped = j.equipo === 'visitante' || eqN === visN
+          ? 'visitante'
+          : (j.equipo === 'local' || eqN === localN ? 'local' : 'local');
         return {
           nombreJugador: (j.nombreJugador || j.nombre || '').toString(),
           equipo: mapped,
+          setsJugados: parseInt(j.setsJugados) || 0,
           tirosTotales: parseInt(j.tirosTotales) || 0,
-        hits: parseInt(j.hits) || 0,
+          hits: parseInt(j.hits) || 0,
+          quemados: parseInt(j.quemados) || 0,
+          asistencias: parseInt(j.asistencias) || 0,
           tirosRecibidos: parseInt(j.tirosRecibidos) || 0,
           hitsRecibidos: parseInt(j.hitsRecibidos) || 0,
-          asistencias: parseInt(j.asistencias) || 0,
-        catches: parseInt(j.catches) || 0,
-          catchesIntentos: parseInt(j.catchesIntentos) || 0,
-          catchesRecibidos: parseInt(j.catchesRecibidos) || 0,
-          		dodges: parseInt(j.dodges) || 0,
+          dodges: parseInt(j.dodges) || 0,
           esquivesExitosos: parseInt(j.esquivesExitosos) || 0,
-        bloqueos: parseInt(j.bloqueos) || 0,
-          bloqueosIntentos: parseInt(j.bloqueosIntentos) || 0,
-        quemados: parseInt(j.quemados) || 0,
           ponchado: parseInt(j.ponchado) || 0,
+          catchesIntentos: parseInt(j.catchesIntentos) || 0,
+          catches: parseInt(j.catches) || 0,
+          bloqueosIntentos: parseInt(j.bloqueosIntentos) || 0,
+          bloqueos: parseInt(j.bloqueos) || 0,
           pisoLinea: parseInt(j.pisoLinea) || 0,
-          setsJugados: parseInt(j.setsJugados) || 0,
-        tarjetasAmarillas: parseInt(j.tarjetasAmarillas) || 0,
-        tarjetasRojas: parseInt(j.tarjetasRojas) || 0
+          catchesRecibidos: parseInt(j.catchesRecibidos) || 0,
+          tarjetasAmarillas: parseInt(j.tarjetasAmarillas) || 0,
+          tarjetasRojas: parseInt(j.tarjetasRojas) || 0
         };
       });
-=======
-    if (Array.isArray(estadisticasJugadores)) {
-      partidos[partidoIndex].estadisticasJugadores = estadisticasJugadores;
->>>>>>> 82c108c (recalcular ranking desde partidos)
     }
     
     // Sincronizar roster del evento (plantelNombres) con los jugadores cargados en este partido

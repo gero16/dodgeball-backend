@@ -22,16 +22,13 @@ const {
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
-<<<<<<< HEAD
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,
   actualizarEstadisticasLigaManual,
   upsertEstadisticasJugadores,
-  migrarEstadisticasLigaAEstadistica
-=======
+  migrarEstadisticasLigaAEstadistica,
   recalcularEstadisticasLiga
->>>>>>> 82c108c (recalcular ranking desde partidos)
 } = require('../controllers/eventoController');
 
 const { adminAuth } = require('../middleware/auth');
