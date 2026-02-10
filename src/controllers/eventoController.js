@@ -2011,7 +2011,27 @@ const actualizarEstadisticasLigaManual = async (req, res) => {
       bloqueos: normalizeInt(j.bloqueos),
       pisoLinea: normalizeInt(j.pisoLinea),
       catchesRecibidos: normalizeInt(j.catchesRecibidos),
-      poderLiga: normalizeFloat(j.poderLiga)
+      porcentajeHits: normalizeFloat(j.porcentajeHits),
+      porcentajeOuts: normalizeFloat(j.porcentajeOuts),
+      porcentajeCatches: normalizeFloat(j.porcentajeCatches),
+      porcentajeBloqueos: normalizeFloat(j.porcentajeBloqueos),
+      porcentajePonchado: normalizeFloat(j.porcentajePonchado),
+      indiceAtaque: normalizeFloat(j.indiceAtaque),
+      indiceDefensa: normalizeFloat(j.indiceDefensa),
+      poderLiga: normalizeFloat(j.poderLiga),
+      poderPromedioPartido: normalizeFloat(j.poderPromedioPartido),
+      poderPromedioPartidoAjustado: normalizeFloat(j.poderPromedioPartidoAjustado),
+      tirosPorSet: normalizeFloat(j.tirosPorSet),
+      hitsPorSet: normalizeFloat(j.hitsPorSet),
+      quemadosPorSet: normalizeFloat(j.quemadosPorSet),
+      asistenciasPorSet: normalizeFloat(j.asistenciasPorSet),
+      tirosRecibidosPorSet: normalizeFloat(j.tirosRecibidosPorSet),
+      hitsRecibidosPorSet: normalizeFloat(j.hitsRecibidosPorSet),
+      esquivesPorSet: normalizeFloat(j.esquivesPorSet),
+      ponchadoPorSet: normalizeFloat(j.ponchadoPorSet),
+      catchesPorSet: normalizeFloat(j.catchesPorSet),
+      bloqueosPorSet: normalizeFloat(j.bloqueosPorSet),
+      catchesRecibidosPorSet: normalizeFloat(j.catchesRecibidosPorSet)
     })) : [];
 
     evento.datosEspecificos.liga.estadisticasLiga = sanitized;
