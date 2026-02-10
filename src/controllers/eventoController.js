@@ -4,6 +4,7 @@ const Horario = require('../models/Horario');
 const XLSX = require('xlsx');
 const Jugador = require('../models/Jugador');
 const Equipo = require('../models/Equipo');
+const Usuario = require('../models/Usuario');
 const fs = require('fs');
 const path = require('path');
 const { calcularEstadisticasCompletas } = require('../utils/estadisticas');
@@ -158,6 +159,75 @@ function buildTeamAliasResolver(equiposDb = []) {
   return { tryMatch };
 }
 
+async function getOrCreateEquipoByName(nombreEquipo) {
+  if (!nombreEquipo) return null;
+  const norm = normalizeName(nombreEquipo);
+  if (!norm) return null;
+  const existing = await Equipo.findOne({
+    nombre: { $regex: `^${escapeRegExp(nombreEquipo)}$`, $options: 'i' }
+  });
+  if (existing) return existing;
+  const created = await Equipo.create({
+    nombre: nombreEquipo,
+    tipo: 'club'
+  });
+  return created;
+}
+
+async function getOrCreateJugadorByNombre(nombreCompleto, equipoDoc) {
+  const clean = (nombreCompleto || '').toString().trim();
+  if (!clean) return null;
+  const parts = clean.split(/\s+/);
+  const nombre = parts[0];
+  const apellido = parts.slice(1).join(' ') || 'SinApellido';
+  const nombreRegex = new RegExp(`^${escapeRegExp(nombre)}$`, 'i');
+  const apellidoRegex = new RegExp(`^${escapeRegExp(apellido)}$`, 'i');
+
+  let jugador = await Jugador.findOne({ nombre: nombreRegex, apellido: apellidoRegex });
+  if (!jugador) {
+    // Crear usuario placeholder y jugador
+    const emailSafe = normalizeName(clean).replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+    const unique = Date.now().toString(36);
+    const email = `auto.${emailSafe || 'jugador'}.${unique}@dodgeball.local`;
+    const password = `Auto_${unique}_pass`;
+    const usuario = await Usuario.create({
+      nombre: clean,
+      email,
+      password
+    });
+    jugador = await Jugador.create({
+      usuario: usuario._id,
+      nombre,
+      apellido,
+      posicion: 'versatil',
+      activo: true,
+      estadisticasPorEquipo: equipoDoc ? [{
+        equipo: equipoDoc._id,
+        nombreEquipo: equipoDoc.nombre,
+        tipoEquipo: equipoDoc.tipo || 'club',
+        temporada: '2024-2025'
+      }] : []
+    });
+  } else if (equipoDoc) {
+    // Asegurar vínculo en estadisticasPorEquipo
+    const exists = Array.isArray(jugador.estadisticasPorEquipo)
+      ? jugador.estadisticasPorEquipo.some(e => e.equipo?.toString() === equipoDoc._id.toString())
+      : false;
+    if (!exists) {
+      jugador.estadisticasPorEquipo = Array.isArray(jugador.estadisticasPorEquipo) ? jugador.estadisticasPorEquipo : [];
+      jugador.estadisticasPorEquipo.push({
+        equipo: equipoDoc._id,
+        nombreEquipo: equipoDoc.nombre,
+        tipoEquipo: equipoDoc.tipo || 'club',
+        temporada: '2024-2025'
+      });
+      await jugador.save();
+    }
+  }
+
+  return jugador;
+}
+
 async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado, teamAliasResolver) {
   const parts = (nombreCompleto || '').toString().trim().split(/\s+/);
   if (parts.length === 0) return null;
@@ -280,12 +350,20 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
         const jugadorKey = normalizeName(nombreJugador);
         const matchIdx = rosterNorm.findIndex(n => n === jugadorKey || n.includes(jugadorKey) || jugadorKey.includes(n));
         if (matchIdx === -1) {
-          warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
-          continue;
+          // Crear equipo si no existe y continuar
+          const equipoCreado = await getOrCreateEquipoByName(teamDisplay);
+          if (!equipoCreado) {
+            warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
+            continue;
+          }
+          const teamKeyNew = normalizeName(equipoCreado.nombre);
+          if (!equipoMaps.has(teamKeyNew)) {
+            equipoMaps.set(teamKeyNew, { equipoDoc: equipoCreado, playerNameToId: new Map() });
+          }
+          warnings.push(`Equipo creado automáticamente: "${teamDisplay}"`);
+          // Reasignar teamEntry para continuar
+          teamEntry = equipoMaps.get(teamKeyNew);
         }
-        // No hay equipo/jugador en DB: no se puede persistir en Estadistica
-        warnings.push(`Jugador sin Equipo/Jugador en DB: "${teamDisplay}" -> "${nombreJugador}"`);
-        continue;
       }
 
       const jugadorKey = normalizeName(nombreJugador);
@@ -320,8 +398,19 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
             warnings.push(`Jugador vinculado por nombre a "${teamDisplay}": "${nombreJugador}"`);
           }
         } else {
-          warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
-          continue;
+          // Crear jugador y vincularlo al equipo
+          const jugadorCreado = await getOrCreateJugadorByNombre(nombreJugador, teamEntry.equipoDoc);
+          if (!jugadorCreado?._id) {
+            warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
+            continue;
+          }
+          await Equipo.updateOne(
+            { _id: teamEntry.equipoDoc._id, 'jugadores.jugador': { $ne: jugadorCreado._id } },
+            { $push: { jugadores: { jugador: jugadorCreado._id } } }
+          );
+          jugadorId = jugadorCreado._id.toString();
+          teamEntry.playerNameToId.set(jugadorKey, jugadorId);
+          warnings.push(`Jugador creado automáticamente: "${nombreJugador}" en "${teamDisplay}"`);
         }
       }
 
