@@ -394,6 +394,11 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
         }
       }
 
+      if (!teamEntry?.equipoDoc?._id) {
+        warnings.push(`Equipo no disponible para jugador: "${teamDisplay}" -> "${nombreJugador}"`);
+        continue;
+      }
+
       if (!jugadorId) {
         const fallback = await findJugadorByNombre(
           nombreJugador,
