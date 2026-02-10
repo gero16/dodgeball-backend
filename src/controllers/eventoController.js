@@ -186,9 +186,15 @@ async function getOrCreateJugadorByNombre(nombreCompleto, equipoDoc) {
   let jugador = await Jugador.findOne({ nombre: nombreRegex, apellido: apellidoRegex });
   if (!jugador) {
     // Crear usuario placeholder y jugador
-    const emailSafe = normalizeName(clean).replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+    const emailSafe = normalizeName(clean)
+      .replace(/\s+/g, '.')
+      .replace(/[^a-z0-9.]/g, '')
+      .replace(/\.+/g, '.')
+      .replace(/^\./, '')
+      .replace(/\.$/, '');
     const unique = Date.now().toString(36);
-    const email = `auto.${emailSafe || 'jugador'}.${unique}@dodgeball.local`;
+    const localPart = `auto.${emailSafe || 'jugador'}.${unique}`.slice(0, 50);
+    const email = `${localPart}@dodgeball.local`;
     const password = `Auto_${unique}_pass`;
     const usuario = await Usuario.create({
       nombre: clean,
