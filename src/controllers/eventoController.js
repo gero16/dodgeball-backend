@@ -158,6 +158,37 @@ function buildTeamAliasResolver(equiposDb = []) {
   return { tryMatch };
 }
 
+async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado) {
+  const parts = (nombreCompleto || '').toString().trim().split(/\s+/);
+  if (parts.length === 0) return null;
+  const nombre = parts[0];
+  const apellido = parts.slice(1).join(' ');
+  const nombreRegex = new RegExp(`^${escapeRegExp(nombre)}$`, 'i');
+  const apellidoRegex = apellido ? new RegExp(`^${escapeRegExp(apellido)}$`, 'i') : null;
+
+  let jugador = null;
+  if (apellidoRegex) {
+    jugador = await Jugador.findOne({ activo: true, nombre: nombreRegex, apellido: apellidoRegex }).lean();
+  }
+  if (!jugador) {
+    jugador = await Jugador.findOne({
+      activo: true,
+      $or: [
+        { nombre: { $regex: nombreRegex } },
+        { apellido: apellidoRegex || nombreRegex }
+      ]
+    }).lean();
+  }
+
+  if (!jugador) return null;
+
+  const statsEquipos = Array.isArray(jugador.estadisticasPorEquipo) ? jugador.estadisticasPorEquipo : [];
+  const matchEquipo = statsEquipos.find((e) => normalizeName(e?.nombreEquipo) === equipoNombreNormalizado);
+  if (!matchEquipo) return null;
+
+  return { jugador, equipoId: matchEquipo.equipo?.toString() || null };
+}
+
 async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
   const evento = await Evento.findById(eventoId).lean();
   if (!evento) {
@@ -242,8 +273,20 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
       }
 
       if (!jugadorId) {
-        warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
-        continue;
+        const fallback = await findJugadorByNombre(nombreJugador, normalizeName(teamEntry.equipoDoc.nombre));
+        if (fallback?.jugador?._id) {
+          const equipoIdResolved = fallback.equipoId || teamEntry.equipoDoc._id.toString();
+          // Vincular al roster del equipo si no existe
+          await Equipo.updateOne(
+            { _id: equipoIdResolved, 'jugadores.jugador': { $ne: fallback.jugador._id } },
+            { $push: { jugadores: { jugador: fallback.jugador._id } } }
+          );
+          jugadorId = fallback.jugador._id.toString();
+          teamEntry.playerNameToId.set(jugadorKey, jugadorId);
+        } else {
+          warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
+          continue;
+        }
       }
 
       const equipoId = teamEntry.equipoDoc._id.toString();
