@@ -158,7 +158,7 @@ function buildTeamAliasResolver(equiposDb = []) {
   return { tryMatch };
 }
 
-async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado) {
+async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado, teamAliasResolver) {
   const parts = (nombreCompleto || '').toString().trim().split(/\s+/);
   if (parts.length === 0) return null;
   const nombre = parts[0];
@@ -184,9 +184,22 @@ async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado) {
 
   const statsEquipos = Array.isArray(jugador.estadisticasPorEquipo) ? jugador.estadisticasPorEquipo : [];
   const matchEquipo = statsEquipos.find((e) => normalizeName(e?.nombreEquipo) === equipoNombreNormalizado);
-  if (!matchEquipo) return null;
+  if (matchEquipo) {
+    return { jugador, equipoId: matchEquipo.equipo?.toString() || null };
+  }
 
-  return { jugador, equipoId: matchEquipo.equipo?.toString() || null };
+  // Fallback: intentar alias de equipo (ej. plural/singular, The)
+  const aliasName = teamAliasResolver?.tryMatch?.(equipoNombreNormalizado) || null;
+  if (aliasName) {
+    const aliasNorm = normalizeName(aliasName);
+    const aliasMatch = statsEquipos.find((e) => normalizeName(e?.nombreEquipo) === aliasNorm);
+    if (aliasMatch) {
+      return { jugador, equipoId: aliasMatch.equipo?.toString() || null };
+    }
+  }
+
+  // Si no hay match de equipo en stats, devolvemos jugador sin equipo
+  return { jugador, equipoId: null };
 }
 
 async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
@@ -208,7 +221,8 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
     if (p?.equipoVisitante) teamNames.push(p.equipoVisitante);
   }
   const equiposDb = await Equipo.find({ activo: true }).select('nombre jugadores').lean();
-  const { tryMatch } = buildTeamAliasResolver(equiposDb);
+  const teamAliasResolver = buildTeamAliasResolver(equiposDb);
+  const { tryMatch } = teamAliasResolver;
   const resolvedTeamNames = teamNames.map((n) => tryMatch(n) || n);
   const equipoMaps = await buildEquipoRosterMaps(resolvedTeamNames);
   const ligaEquipos = Array.isArray(evento?.datosEspecificos?.liga?.equipos)
@@ -273,7 +287,11 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
       }
 
       if (!jugadorId) {
-        const fallback = await findJugadorByNombre(nombreJugador, normalizeName(teamEntry.equipoDoc.nombre));
+        const fallback = await findJugadorByNombre(
+          nombreJugador,
+          normalizeName(teamEntry.equipoDoc.nombre),
+          teamAliasResolver
+        );
         if (fallback?.jugador?._id) {
           const equipoIdResolved = fallback.equipoId || teamEntry.equipoDoc._id.toString();
           // Vincular al roster del equipo si no existe
@@ -283,6 +301,9 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
           );
           jugadorId = fallback.jugador._id.toString();
           teamEntry.playerNameToId.set(jugadorKey, jugadorId);
+          if (!fallback.equipoId) {
+            warnings.push(`Jugador vinculado por nombre a "${teamDisplay}": "${nombreJugador}"`);
+          }
         } else {
           warnings.push(`Jugador no encontrado en roster de "${teamDisplay}": "${nombreJugador}"`);
           continue;
