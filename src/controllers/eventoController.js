@@ -360,25 +360,19 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
       }
 
       if (!teamEntry?.equipoDoc?._id) {
-        const roster = eventRosterByTeam.get(teamKey) || [];
-        const rosterNorm = roster.map(n => normalizeName(n));
-        const jugadorKey = normalizeName(nombreJugador);
-        const matchIdx = rosterNorm.findIndex(n => n === jugadorKey || n.includes(jugadorKey) || jugadorKey.includes(n));
-        if (matchIdx === -1) {
-          // Crear equipo si no existe y continuar
-          const equipoCreado = await getOrCreateEquipoByName(teamDisplay);
-          if (!equipoCreado) {
-            warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
-            continue;
-          }
-          const teamKeyNew = normalizeName(equipoCreado.nombre);
-          if (!equipoMaps.has(teamKeyNew)) {
-            equipoMaps.set(teamKeyNew, { equipoDoc: equipoCreado, playerNameToId: new Map() });
-          }
-          warnings.push(`Equipo creado automáticamente: "${teamDisplay}"`);
-          // Reasignar teamEntry para continuar
-          teamEntry = equipoMaps.get(teamKeyNew);
+        // Crear equipo si no existe (sin depender del roster del evento)
+        const equipoCreado = await getOrCreateEquipoByName(teamDisplay);
+        if (!equipoCreado) {
+          warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
+          continue;
         }
+        const teamKeyNew = normalizeName(equipoCreado.nombre);
+        if (!equipoMaps.has(teamKeyNew)) {
+          equipoMaps.set(teamKeyNew, { equipoDoc: equipoCreado, playerNameToId: new Map() });
+        }
+        warnings.push(`Equipo creado automáticamente: "${teamDisplay}"`);
+        // Reasignar teamEntry para continuar
+        teamEntry = equipoMaps.get(teamKeyNew);
       }
 
       const jugadorKey = normalizeName(nombreJugador);
@@ -509,6 +503,158 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
     warnings
   };
 }
+
+const slugifyEquipo = (name) => normalizeName(name || '').replace(/\s+/g, '-');
+
+const splitNombreApellido = (full) => {
+  const parts = (full || '').toString().trim().split(/\s+/);
+  if (parts.length === 0) return { nombre: '', apellido: '' };
+  if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+  return { nombre: parts[0], apellido: parts.slice(1).join(' ') };
+};
+
+// Obtener estadísticas de jugadores calculadas desde partidos (sin depender de DB de jugadores/equipos)
+const obtenerEstadisticasEventoCalculadas = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { equipo } = req.query;
+
+    const evento = await Evento.findById(id).lean();
+    if (!evento) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+
+    const equiposEvento = Array.isArray(evento?.datosEspecificos?.liga?.equipos)
+      ? evento.datosEspecificos.liga.equipos
+      : [];
+    const partidos = Array.isArray(evento?.datosEspecificos?.liga?.partidos)
+      ? evento.datosEspecificos.liga.partidos
+      : [];
+    const finalizados = partidos.filter(p => p?.estado === 'finalizado');
+
+    const acc = new Map(); // key: equipo|jugador
+
+    const bump = (row, field, value) => {
+      row[field] = (row[field] || 0) + (parseInt(value, 10) || 0);
+    };
+
+    for (const partido of finalizados) {
+      const localName = partido?.equipoLocal || '';
+      const visitName = partido?.equipoVisitante || '';
+      const jugadores = Array.isArray(partido?.estadisticasJugadores) ? partido.estadisticasJugadores : [];
+      for (const j of jugadores) {
+        const nombreJugador = (j?.nombreJugador || '').toString().trim();
+        if (!nombreJugador) continue;
+        const side = j?.equipo === 'visitante' ? 'visitante' : 'local';
+        const equipoNombre = side === 'visitante' ? visitName : localName;
+        if (!equipoNombre) continue;
+
+        const key = `${normalizeName(equipoNombre)}|${normalizeName(nombreJugador)}`;
+        if (!acc.has(key)) {
+          acc.set(key, {
+            equipoNombre,
+            nombreJugador,
+            setsJugados: 0,
+            tirosTotales: 0,
+            hits: 0,
+            quemados: 0,
+            asistencias: 0,
+            tirosRecibidos: 0,
+            hitsRecibidos: 0,
+            esquives: 0,
+            esquivesSinEsfuerzo: 0,
+            ponchado: 0,
+            catchesIntentados: 0,
+            catches: 0,
+            bloqueosIntentados: 0,
+            bloqueos: 0,
+            pisoLinea: 0,
+            catchesRecibidos: 0
+          });
+        }
+        const row = acc.get(key);
+        bump(row, 'setsJugados', j.setsJugados);
+        bump(row, 'tirosTotales', j.tirosTotales);
+        bump(row, 'hits', j.hits);
+        bump(row, 'quemados', j.quemados);
+        bump(row, 'asistencias', j.asistencias);
+        bump(row, 'tirosRecibidos', j.tirosRecibidos);
+        bump(row, 'hitsRecibidos', j.hitsRecibidos);
+        bump(row, 'esquives', j.dodges || j.esquives);
+        bump(row, 'esquivesSinEsfuerzo', j.esquivesExitosos);
+        bump(row, 'ponchado', j.ponchado);
+        bump(row, 'catchesIntentados', j.catchesIntentos);
+        bump(row, 'catches', j.catches);
+        bump(row, 'bloqueosIntentados', j.bloqueosIntentos);
+        bump(row, 'bloqueos', j.bloqueos);
+        bump(row, 'pisoLinea', j.pisoLinea);
+        bump(row, 'catchesRecibidos', j.catchesRecibidos);
+      }
+    }
+
+    const rankingGeneral = [];
+    const porEquipoMap = new Map();
+
+    for (const row of acc.values()) {
+      const computed = calcularEstadisticasCompletas(row);
+      const { nombre, apellido } = splitNombreApellido(row.nombreJugador);
+      const equipoNombre = row.equipoNombre;
+      const equipoKey = slugifyEquipo(equipoNombre);
+
+      const item = {
+        _id: `${equipoKey}-${normalizeName(row.nombreJugador)}`,
+        equipo: {
+          _id: equipoKey,
+          nombre: equipoNombre,
+          logo: equiposEvento.find(e => normalizeName(e?.nombre) === normalizeName(equipoNombre))?.logo || ''
+        },
+        jugador: {
+          _id: normalizeName(row.nombreJugador),
+          nombre,
+          apellido
+        },
+        ...row,
+        porcentajeHits: computed.porcentajeHits || 0,
+        porcentajeOuts: computed.porcentajeOuts || 0,
+        porcentajeCatches: computed.porcentajeCatches || 0,
+        porcentajeBloqueos: computed.porcentajeBloqueos || 0,
+        indiceAtaque: computed.indiceAtaque || 0,
+        indiceDefensa: computed.indiceDefensa || 0,
+        indicePoder: computed.indicePoder || 0
+      };
+
+      if (!equipo || equipo === item.equipo._id) {
+        rankingGeneral.push(item);
+      }
+
+      if (!porEquipoMap.has(equipoKey)) {
+        porEquipoMap.set(equipoKey, {
+          equipo: item.equipo,
+          jugadores: []
+        });
+      }
+      porEquipoMap.get(equipoKey).jugadores.push(item);
+    }
+
+    const porEquipo = Array.from(porEquipoMap.values());
+
+    res.json({
+      success: true,
+      data: {
+        evento: { _id: evento._id, titulo: evento.titulo, tipo: evento.tipo },
+        estadisticas: {
+          totalJugadores: rankingGeneral.length,
+          rankingGeneral,
+          porEquipo,
+          paginacion: { pagina: 1, limite: 1000, total: rankingGeneral.length, paginas: 1 }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas calculadas:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
 
 // Obtener todos los eventos
 const obtenerEventos = async (req, res) => {
@@ -2483,6 +2629,7 @@ module.exports = {
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
+  obtenerEstadisticasEventoCalculadas,
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,

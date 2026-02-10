@@ -22,6 +22,7 @@ const {
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
+  obtenerEstadisticasEventoCalculadas,
   procesarHojaCalculoEstadisticas,
   previsualizarHojaCalculoEstadisticas,
   obtenerJugadoresEvento,
@@ -46,6 +47,7 @@ router.get('/:id/estadisticas/liga', obtenerEstadisticasLiga);
 router.get('/:id/estadisticas/campeonato', obtenerEstadisticasCampeonato);
 router.get('/:id/estadisticas/participacion', obtenerEstadisticasParticipacion);
 router.get('/:id/estadisticas/jugadores', obtenerEstadisticasEvento);
+router.get('/:id/estadisticas/jugadores-calculadas', obtenerEstadisticasEventoCalculadas);
 router.post('/:id/estadisticas/recalcular', recalcularEstadisticasLiga);
 
 // Rutas específicas de campeonatos
