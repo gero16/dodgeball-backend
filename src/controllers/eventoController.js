@@ -122,6 +122,42 @@ async function buildEquipoRosterMaps(teamNames = []) {
   return out;
 }
 
+function buildTeamAliasResolver(equiposDb = []) {
+  const byNorm = new Map();
+  const allNames = equiposDb.map(eq => eq?.nombre).filter(Boolean);
+
+  for (const nombre of allNames) {
+    const n = normalizeName(nombre);
+    if (!byNorm.has(n)) byNorm.set(n, nombre);
+  }
+
+  const tryMatch = (raw) => {
+    const norm = normalizeName(raw);
+    if (!norm) return null;
+    if (byNorm.has(norm)) return byNorm.get(norm);
+
+    // Heurística: singularizar si termina en 's'
+    if (norm.endsWith('s')) {
+      const sing = norm.slice(0, -1);
+      if (byNorm.has(sing)) return byNorm.get(sing);
+    }
+
+    // Heurística: remover 'the ' inicial
+    if (norm.startsWith('the ')) {
+      const noThe = norm.replace(/^the\s+/, '');
+      if (byNorm.has(noThe)) return byNorm.get(noThe);
+      if (noThe.endsWith('s')) {
+        const sing = noThe.slice(0, -1);
+        if (byNorm.has(sing)) return byNorm.get(sing);
+      }
+    }
+
+    return null;
+  };
+
+  return { tryMatch };
+}
+
 async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
   const evento = await Evento.findById(eventoId).lean();
   if (!evento) {
@@ -140,7 +176,18 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
     if (p?.equipoLocal) teamNames.push(p.equipoLocal);
     if (p?.equipoVisitante) teamNames.push(p.equipoVisitante);
   }
-  const equipoMaps = await buildEquipoRosterMaps(teamNames);
+  const equiposDb = await Equipo.find({ activo: true }).select('nombre jugadores').lean();
+  const { tryMatch } = buildTeamAliasResolver(equiposDb);
+  const resolvedTeamNames = teamNames.map((n) => tryMatch(n) || n);
+  const equipoMaps = await buildEquipoRosterMaps(resolvedTeamNames);
+  const ligaEquipos = Array.isArray(evento?.datosEspecificos?.liga?.equipos)
+    ? evento.datosEspecificos.liga.equipos
+    : [];
+  const eventRosterByTeam = new Map(
+    ligaEquipos
+      .filter(eq => eq?.nombre)
+      .map(eq => [normalizeName(eq.nombre), Array.isArray(eq.plantelNombres) ? eq.plantelNombres : []])
+  );
 
   // Acumular por (equipoId, jugadorId)
   const acc = new Map();
@@ -168,7 +215,16 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
       const teamEntry = equipoMaps.get(teamKey);
 
       if (!teamEntry?.equipoDoc?._id) {
-        warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
+        const roster = eventRosterByTeam.get(teamKey) || [];
+        const rosterNorm = roster.map(n => normalizeName(n));
+        const jugadorKey = normalizeName(nombreJugador);
+        const matchIdx = rosterNorm.findIndex(n => n === jugadorKey || n.includes(jugadorKey) || jugadorKey.includes(n));
+        if (matchIdx === -1) {
+          warnings.push(`Equipo no encontrado en DB: "${teamDisplay}" (jugador "${nombreJugador}")`);
+          continue;
+        }
+        // No hay equipo/jugador en DB: no se puede persistir en Estadistica
+        warnings.push(`Jugador sin Equipo/Jugador en DB: "${teamDisplay}" -> "${nombreJugador}"`);
         continue;
       }
 
