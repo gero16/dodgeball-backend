@@ -194,7 +194,7 @@ async function getOrCreateJugadorByNombre(nombreCompleto, equipoDoc) {
       .replace(/\.$/, '');
     const unique = Date.now().toString(36);
     const localPart = `auto.${emailSafe || 'jugador'}.${unique}`.slice(0, 50);
-    const email = `${localPart}@dodgeball.local`;
+    const email = `${localPart}@dodgeball.com`;
     const password = `Auto_${unique}_pass`;
     const usuario = await Usuario.create({
       nombre: clean,
