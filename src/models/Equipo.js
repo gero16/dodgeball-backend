@@ -25,6 +25,15 @@ const equipoSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  fotoPortada: {
+    type: String,
+    default: ''
+  },
+  fotoInfo: {
+    type: String,
+    default: ''
+  },
+  galeria: [String],
   colorPrincipal: {
     type: String,
     default: '#000000'
