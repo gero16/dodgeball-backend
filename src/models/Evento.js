@@ -120,6 +120,10 @@ const eventoSchema = new mongoose.Schema({
       equipos: [{
         nombre: String,
         logo: String,
+        ciudad: String,
+        fotoPortada: String,
+        fotoInfo: String,
+        galeria: [String],
         plantelNombres: [String],
         puntos: { type: Number, default: 0 },
         partidosJugados: { type: Number, default: 0 },
@@ -381,7 +385,8 @@ const eventoSchema = new mongoose.Schema({
     }
   }]
 }, {
-  timestamps: true
+  timestamps: true,
+  strict: false  // Permite guardar campos no definidos (ej: fotoPortada, fotoInfo, galeria en equipos)
 });
 
 // Índices
