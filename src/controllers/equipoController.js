@@ -100,7 +100,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
     const norm = (s) => (s || '').toString().trim().toLowerCase();
     const nombreNorm = norm(nombre);
 
-    // Top 3: usar Estadistica (agregada en todos los eventos del equipo)
+    // Top 3: usar Estadistica (agregada por jugador en todos los eventos del equipo)
     let topJugadores = [];
     const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const equipoDoc = await Equipo.findOne({
