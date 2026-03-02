@@ -2517,13 +2517,10 @@ const obtenerJugadoresEvento = async (req, res) => {
       if (evEq) dbNombreToEventoNombre.set(eqDb.nombre, evEq.nombre);
     }
 
-    // From Equipo model - solo si el evento NO tiene plantelNombres
+    // 1. Modelo Equipo (Jugador): fuente principal - jugadores del modelo global
     for (const eqDb of equiposDocs) {
       const nombreEvento = dbNombreToEventoNombre.get(eqDb.nombre);
       if (!nombreEvento) continue;
-      const equipoEnEvento = ligaEquipos.find(e => e?.nombre === nombreEvento);
-      const tienePlantel = Array.isArray(equipoEnEvento?.plantelNombres) && equipoEnEvento.plantelNombres.length > 0;
-      if (tienePlantel) continue;
       const list = (eqDb.jugadores || [])
         .filter(j => j.jugador && j.jugador.activo !== false)
         .map(j => ({
@@ -2534,17 +2531,18 @@ const obtenerJugadoresEvento = async (req, res) => {
           numeroCamiseta: j.numeroCamiseta || null,
           posicion: j.posicion || null
         }));
-      equiposMap.set(nombreEvento, list);
+      if (list.length > 0) {
+        equiposMap.set(nombreEvento, list);
+      }
     }
 
-    // From Evento.equipos (Usuario) - solo si no tiene plantelNombres
+    // 2. Evento.equipos (Usuario): integrantes inscritos - solo si el equipo aún no tiene jugadores
     for (const eq of (evento.equipos || [])) {
       if (!eq?.nombre) continue;
       const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(eq.nombre));
       const nombreClave = evEq?.nombre || eq.nombre;
-      const tienePlantel = Array.isArray(evEq?.plantelNombres) && evEq.plantelNombres.length > 0;
-      if (tienePlantel) continue;
       const existentes = equiposMap.get(nombreClave) || [];
+      if (existentes.length > 0) continue; // ya tiene jugadores del modelo Equipo
       const adicionales = (eq.integrantes || []).map(u => ({
         id: u._id,
         nombre: u.nombre,
@@ -2561,9 +2559,11 @@ const obtenerJugadoresEvento = async (req, res) => {
       equiposMap.set(nombreClave, Array.from(byName.values()));
     }
 
-    // plantelNombres del evento: fuente de verdad, reemplaza todo cuando existe
+    // 3. plantelNombres: solo como fallback cuando el equipo no tiene jugadores del modelo Jugador
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
+      const actuales = equiposMap.get(eq.nombre) || [];
+      if (actuales.length > 0) continue; // ya tiene jugadores del modelo Equipo
       const nombres = (eq.plantelNombres || []).filter(Boolean);
       if (nombres.length > 0) {
         equiposMap.set(eq.nombre, nombres.map(n => ({
