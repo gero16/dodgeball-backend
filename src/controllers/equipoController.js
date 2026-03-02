@@ -167,7 +167,6 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       catchesRecibidos: 0,
       bloqueosIntentos: 0
     };
-    let topJugadores = [];
 
     for (const ev of eventos) {
       const liga = ev.datosEspecificos?.liga;
