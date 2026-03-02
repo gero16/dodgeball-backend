@@ -10,6 +10,7 @@ const {
   obtenerRanking,
   obtenerResumen
 } = require('../controllers/estadisticaController');
+const { sincronizarTodosEventos } = require('../controllers/eventoController');
 
 const router = express.Router();
 
@@ -33,6 +34,13 @@ router.get('/', obtenerEstadisticas);
  * @access Public
  */
 router.get('/resumen', obtenerResumen);
+
+/**
+ * @route POST /api/estadisticas/sincronizar-todos
+ * @desc Sincroniza estadisticasLiga de todos los eventos a tabla Estadistica (incluye indicePoder)
+ * @access Public
+ */
+router.post('/sincronizar-todos', sincronizarTodosEventos);
 
 /**
  * @route GET /api/estadisticas/ranking

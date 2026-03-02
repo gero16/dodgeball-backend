@@ -1330,6 +1330,104 @@ const upsertEstadisticasJugadores = async (req, res) => {
   }
 };
 
+// Helper: sincroniza estadisticasLiga a Estadistica para un evento (sin req/res)
+const syncEstadisticasLigaAEstadisticaPorEvento = async (eventoId, jugadores) => {
+  const evento = await Evento.findById(eventoId);
+  if (!evento) return { error: 'Evento no encontrado', procesados: 0 };
+  if (!Array.isArray(jugadores) || jugadores.length === 0) return { procesados: 0 };
+
+  const equiposDocs = await Equipo.find({});
+  const equipoByName = new Map(equiposDocs.map(e => [String(e.nombre || '').toLowerCase().trim(), e]));
+  const norm = (s) => String(s || '').toLowerCase().trim();
+  const splitName = (full) => {
+    const parts = String(full || '').trim().split(/\s+/);
+    if (parts.length === 0) return { nombre: '', apellido: '' };
+    if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+    return { nombre: parts.slice(0, -1).join(' '), apellido: parts[parts.length - 1] };
+  };
+  const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
+  const bulk = [];
+
+  for (const j of jugadores) {
+    const equipoNombre = j.equipoNombre || j.equipo || '';
+    const jugadorNombre = j.nombreJugador || j.jugador || '';
+    if (!equipoNombre || !jugadorNombre) continue;
+
+    let equipoDoc = equipoByName.get(norm(equipoNombre));
+    if (!equipoDoc) {
+      equipoDoc = new Equipo({ nombre: equipoNombre, tipo: 'otro' });
+      await equipoDoc.save();
+      equipoByName.set(norm(equipoNombre), equipoDoc);
+    }
+
+    const { nombre, apellido } = splitName(jugadorNombre);
+    let jugadorDoc = await Jugador.findOne({ nombre, apellido });
+    if (!jugadorDoc) {
+      jugadorDoc = new Jugador({ nombre, apellido, activo: true });
+      await jugadorDoc.save();
+    }
+
+    const tirosTotales = parseInt(j.tirosTotales) || 0;
+    const hits = parseInt(j.hits) || 0;
+    const quemados = parseInt(j.quemados) || 0;
+    const asistencias = parseInt(j.asistencias) || 0;
+    const tirosRecibidos = parseInt(j.tirosRecibidos) || 0;
+    const hitsRecibidos = parseInt(j.hitsRecibidos) || 0;
+    const esquives = parseInt(j.esquives) || 0;
+    const esquivesExitosos = parseInt(j.esquivesExitosos) || 0;
+    const ponchado = parseInt(j.ponchado) || 0;
+    const catchesIntentos = parseInt(j.catchesIntentos) || 0;
+    const catches = parseInt(j.catches) || 0;
+    const bloqueosIntentos = parseInt(j.bloqueosIntentos) || 0;
+    const bloqueos = parseInt(j.bloqueos) || 0;
+    const pisoLinea = parseInt(j.pisoLinea) || 0;
+    const catchesRecibidos = parseInt(j.catchesRecibidos) || 0;
+    const setsJugados = parseInt(j.setsJugados) || 0;
+    const indicePoder = Number(j.poderLiga || j.indicePoder || 0);
+
+    const update = {
+      equipo: equipoDoc._id,
+      jugador: jugadorDoc._id,
+      evento: evento._id,
+      setsJugados,
+      tirosTotales,
+      hits,
+      quemados,
+      asistencias,
+      tirosRecibidos,
+      hitsRecibidos,
+      esquives,
+      esquivesSinEsfuerzo: esquivesExitosos,
+      ponchado,
+      catchesIntentados: catchesIntentos,
+      catches,
+      bloqueosIntentados: bloqueosIntentos,
+      bloqueos,
+      pisoLinea,
+      catchesRecibidos,
+      porcentajeHits: pct(hits, tirosTotales),
+      porcentajeOuts: pct(ponchado, tirosRecibidos),
+      porcentajeCatches: pct(catches, catchesIntentos),
+      porcentajeBloqueos: pct(bloqueos, bloqueosIntentos),
+      indiceAtaque: Number(j.indiceAtaque || 0),
+      indiceDefensa: Number(j.indiceDefensa || 0),
+      indicePoder
+    };
+
+    bulk.push({
+      updateOne: {
+        filter: { evento: evento._id, equipo: equipoDoc._id, jugador: jugadorDoc._id },
+        update: { $set: update },
+        upsert: true
+      }
+    });
+  }
+
+  if (bulk.length === 0) return { procesados: 0 };
+  await Estadistica.bulkWrite(bulk);
+  return { procesados: bulk.length };
+};
+
 // Migrar estadísticasLiga del evento a colección Estadistica
 const migrarEstadisticasLigaAEstadistica = async (req, res) => {
   try {
@@ -1342,12 +1440,55 @@ const migrarEstadisticasLigaAEstadistica = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No hay estadísticas de liga para migrar' });
     }
 
-    // Reutilizar lógica de upsert
-    req.body.jugadores = ligaStats;
-    return await upsertEstadisticasJugadores(req, res);
+    const resultado = await syncEstadisticasLigaAEstadisticaPorEvento(evento._id, ligaStats);
+    if (resultado.error) return res.status(404).json({ success: false, message: resultado.error });
+    return res.json({ success: true, message: 'Migración completada', data: resultado });
   } catch (error) {
     console.error('Error al migrar estadísticas de liga:', error);
     return res.status(500).json({ success: false, message: 'Error interno del servidor' });
+  }
+};
+
+// Sincronizar estadisticasLiga de todos los eventos a tabla Estadistica
+const sincronizarTodosEventos = async (req, res) => {
+  try {
+    const eventos = await Evento.find({ activo: true }).lean();
+    const resultados = [];
+    let totalProcesados = 0;
+
+    for (const ev of eventos) {
+      const liga = ev.datosEspecificos?.liga;
+      const campeonato = ev.datosEspecificos?.campeonato;
+      const torneo = ev.datosEspecificos?.torneo;
+      const ligaStats = liga?.estadisticasLiga || campeonato?.estadisticasLiga || torneo?.estadisticasLiga || [];
+      if (!Array.isArray(ligaStats) || ligaStats.length === 0) continue;
+
+      const resultado = await syncEstadisticasLigaAEstadisticaPorEvento(ev._id, ligaStats);
+      resultados.push({
+        eventoId: ev._id,
+        titulo: ev.titulo || ev.nombre || 'Sin título',
+        procesados: resultado.procesados,
+        error: resultado.error
+      });
+      totalProcesados += resultado.procesados || 0;
+    }
+
+    res.json({
+      success: true,
+      message: `Sincronizados ${totalProcesados} registros de ${resultados.length} eventos`,
+      data: {
+        eventosSincronizados: resultados.length,
+        totalRegistros: totalProcesados,
+        detalle: resultados
+      }
+    });
+  } catch (error) {
+    console.error('Error al sincronizar todos los eventos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
   }
 };
 
@@ -2058,9 +2199,7 @@ const actualizarEstadisticasLigaManual = async (req, res) => {
 
     // Sincronizar a tabla Estadistica (incluye indicePoder/poderLiga)
     try {
-      const syncReq = { params: { id: evento._id }, body: { jugadores: sanitized } };
-      const syncRes = { json: () => {}, status: () => ({ json: () => {} }) };
-      await upsertEstadisticasJugadores(syncReq, syncRes);
+      await syncEstadisticasLigaAEstadisticaPorEvento(evento._id, sanitized);
     } catch (e) {
       console.warn('⚠️ Sync estadisticasLiga a Estadistica:', e?.message);
     }
@@ -2543,5 +2682,6 @@ module.exports = {
   obtenerJugadoresEvento,
   actualizarEstadisticasLigaManual,
   upsertEstadisticasJugadores,
-  migrarEstadisticasLigaAEstadistica
+  migrarEstadisticasLigaAEstadistica,
+  sincronizarTodosEventos
 };
