@@ -2501,10 +2501,31 @@ const obtenerJugadoresEvento = async (req, res) => {
 
     const equiposMap = new Map();
     const nameToId = new Map();
-    // From Equipo model (Jugador)
-    for (const eq of equiposDocs) {
-      if (eq?.nombre && eq?._id) nameToId.set(eq.nombre, eq._id);
-      const list = (eq.jugadores || [])
+    const norm = (s) => (s || '').toString().trim().toLowerCase();
+
+    // Usar siempre el nombre del evento como clave (ligaEquipos)
+    for (const eq of ligaEquipos) {
+      if (!eq?.nombre) continue;
+      equiposMap.set(eq.nombre, []);
+    }
+
+    // Mapear Equipo DB -> nombre en evento (pueden diferir en mayúsculas)
+    const dbNombreToEventoNombre = new Map();
+    for (const eqDb of equiposDocs) {
+      if (!eqDb?.nombre) continue;
+      nameToId.set(eqDb.nombre, eqDb._id);
+      const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(eqDb.nombre));
+      if (evEq) dbNombreToEventoNombre.set(eqDb.nombre, evEq.nombre);
+    }
+
+    // From Equipo model - solo si el evento NO tiene plantelNombres
+    for (const eqDb of equiposDocs) {
+      const nombreEvento = dbNombreToEventoNombre.get(eqDb.nombre);
+      if (!nombreEvento) continue;
+      const equipoEnEvento = ligaEquipos.find(e => e?.nombre === nombreEvento);
+      const tienePlantel = Array.isArray(equipoEnEvento?.plantelNombres) && equipoEnEvento.plantelNombres.length > 0;
+      if (tienePlantel) continue;
+      const list = (eqDb.jugadores || [])
         .filter(j => j.jugador && j.jugador.activo !== false)
         .map(j => ({
           id: j.jugador._id,
@@ -2514,13 +2535,17 @@ const obtenerJugadoresEvento = async (req, res) => {
           numeroCamiseta: j.numeroCamiseta || null,
           posicion: j.posicion || null
         }));
-      equiposMap.set(eq.nombre, list);
+      equiposMap.set(nombreEvento, list);
     }
 
-    // From Evento.equipos (Usuario) as fallback
+    // From Evento.equipos (Usuario) - solo si no tiene plantelNombres
     for (const eq of (evento.equipos || [])) {
       if (!eq?.nombre) continue;
-      const existentes = equiposMap.get(eq.nombre) || [];
+      const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(eq.nombre));
+      const nombreClave = evEq?.nombre || eq.nombre;
+      const tienePlantel = Array.isArray(evEq?.plantelNombres) && evEq.plantelNombres.length > 0;
+      if (tienePlantel) continue;
+      const existentes = equiposMap.get(nombreClave) || [];
       const adicionales = (eq.integrantes || []).map(u => ({
         id: u._id,
         nombre: u.nombre,
@@ -2529,36 +2554,36 @@ const obtenerJugadoresEvento = async (req, res) => {
         numeroCamiseta: null,
         posicion: null
       }));
-      // Merge por nombreCompleto para evitar duplicados
       const byName = new Map(existentes.map(p => [p.nombreCompleto.toLowerCase(), p]));
       for (const p of adicionales) {
         const key = p.nombreCompleto.toLowerCase();
         if (!byName.has(key)) byName.set(key, p);
       }
-      equiposMap.set(eq.nombre, Array.from(byName.values()));
+      equiposMap.set(nombreClave, Array.from(byName.values()));
     }
 
-    // Merge adicional: nombres libres cargados en el evento (plantelNombres)
+    // plantelNombres del evento: fuente de verdad, reemplaza todo cuando existe
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
-      const existentes = equiposMap.get(eq.nombre) || [];
-      const adicionales = (eq.plantelNombres || []).map(n => ({
-        id: null,
-        nombre: n,
-        apellido: '',
-        nombreCompleto: n,
-        numeroCamiseta: null,
-        posicion: null
-      }));
-      const byName = new Map(existentes.map(p => [String(p.nombreCompleto || '').toLowerCase(), p]));
-      for (const p of adicionales) {
-        const key = p.nombreCompleto.toLowerCase();
-        if (!byName.has(key)) byName.set(key, p);
+      const nombres = (eq.plantelNombres || []).filter(Boolean);
+      if (nombres.length > 0) {
+        equiposMap.set(eq.nombre, nombres.map(n => ({
+          id: null,
+          nombre: n,
+          apellido: '',
+          nombreCompleto: n,
+          numeroCamiseta: null,
+          posicion: null
+        })));
       }
-      equiposMap.set(eq.nombre, Array.from(byName.values()));
     }
 
-    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, id: nameToId.get(nombre) || null, jugadores }));
+    const eventoNombreToId = new Map();
+    for (const [dbNombre, id] of nameToId.entries()) {
+      const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(dbNombre));
+      if (evEq) eventoNombreToId.set(evEq.nombre, id);
+    }
+    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, id: eventoNombreToId.get(nombre) || nameToId.get(nombre) || null, jugadores }));
 
     return res.json({ success: true, data: { equipos } });
   } catch (error) {
