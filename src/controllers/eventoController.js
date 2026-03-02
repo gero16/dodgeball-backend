@@ -1609,6 +1609,8 @@ const actualizarEquiposLiga = async (req, res) => {
               fotoPortadaPosicion: eq.fotoPortadaPosicion || 'center',
               fotoInfo: eq.fotoInfo || '',
               fotoInfoPosicion: eq.fotoInfoPosicion || 'center',
+              colorPrincipal: eq.colorPrincipal || '#000000',
+              colorSecundario: eq.colorSecundario || '#FFFFFF',
               galeria: Array.isArray(eq.galeria) ? eq.galeria : []
             },
             $setOnInsert: { tipo: 'club', activo: true }
