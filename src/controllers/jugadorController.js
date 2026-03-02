@@ -116,14 +116,40 @@ const obtenerJugadores = async (req, res) => {
       .populate('estadisticasPorEquipo.equipo', 'nombre tipo')
       .sort({ 'estadisticasGenerales.puntos': -1 })
       .skip(skip)
-      .limit(parseInt(limite));
+      .limit(parseInt(limite))
+      .lean();
 
     const total = await Jugador.countDocuments(query);
+
+    // Obtener equipos (cuadros) a los que pertenece cada jugador
+    const jugadorIds = jugadores.map((j) => j._id.toString());
+    const equiposDocs = await Equipo.find({
+      'jugadores.jugador': { $in: jugadores.map((j) => j._id) },
+      activo: true
+    })
+      .select('nombre tipo jugadores')
+      .lean();
+
+    const equiposPorJugador = {};
+    for (const eq of equiposDocs) {
+      for (const j of eq.jugadores || []) {
+        const jid = (j.jugador && j.jugador.toString ? j.jugador.toString() : String(j.jugador));
+        if (jid && jugadorIds.includes(jid)) {
+          if (!equiposPorJugador[jid]) equiposPorJugador[jid] = [];
+          equiposPorJugador[jid].push({ nombre: eq.nombre, tipo: eq.tipo });
+        }
+      }
+    }
+
+    const jugadoresConEquipos = jugadores.map((j) => ({
+      ...j,
+      equipos: equiposPorJugador[j._id.toString()] || []
+    }));
 
     res.json({
       success: true,
       data: { 
-        jugadores,
+        jugadores: jugadoresConEquipos,
         paginacion: {
           total,
           pagina: parseInt(pagina),
