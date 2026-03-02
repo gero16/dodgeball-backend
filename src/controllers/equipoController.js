@@ -189,7 +189,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
           .limit(3)
           .lean();
         topJugadores = stats.map((s) => ({
-          nombreJugador: s.jugador ? `${(s.jugador.nombre || '').trim()} ${(s.jugador.apellido || '').trim()`.trim() || 'Jugador' : 'Jugador',
+          nombreJugador: s.jugador ? ((s.jugador.nombre || '').trim() + ' ' + (s.jugador.apellido || '').trim()).trim() || 'Jugador' : 'Jugador',
           hits: Number(s.hits) || 0,
           poderLiga: Number(s.indicePoder) || 0
         }));
