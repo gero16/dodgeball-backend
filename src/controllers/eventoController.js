@@ -1570,7 +1570,7 @@ const obtenerEstadisticasParticipacion = async (req, res) => {
   }
 };
 
-// Actualizar equipos de liga
+// Actualizar equipos de liga, campeonato o torneo
 const actualizarEquiposLiga = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1587,11 +1587,10 @@ const actualizarEquiposLiga = async (req, res) => {
     if (!evento.datosEspecificos) {
       evento.datosEspecificos = {};
     }
-    if (!evento.datosEspecificos.liga) {
-      evento.datosEspecificos.liga = {};
-    }
-
-    evento.datosEspecificos.liga.equipos = equipos;
+    const ds = evento.datosEspecificos;
+    const key = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : 'liga';
+    if (!evento.datosEspecificos[key]) evento.datosEspecificos[key] = {};
+    evento.datosEspecificos[key].equipos = equipos;
     await evento.save();
 
     // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria

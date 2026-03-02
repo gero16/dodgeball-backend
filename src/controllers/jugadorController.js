@@ -337,6 +337,45 @@ const obtenerRankingJugadores = async (req, res) => {
   }
 };
 
+// Obtener equipos de un jugador
+const obtenerEquiposJugador = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const equipos = await Equipo.find({
+      'jugadores.jugador': id,
+      activo: true
+    })
+      .select('nombre tipo ciudad logo jugadores')
+      .lean();
+
+    const equiposConDetalle = equipos.map((eq) => {
+      const entrada = (eq.jugadores || []).find((j) => j.jugador?.toString() === id);
+      return {
+        _id: eq._id,
+        nombre: eq.nombre,
+        tipo: eq.tipo,
+        ciudad: eq.ciudad,
+        logo: eq.logo,
+        numeroCamiseta: entrada?.numeroCamiseta,
+        posicion: entrada?.posicion,
+        activo: entrada?.activo !== false
+      };
+    });
+
+    res.json({
+      success: true,
+      data: { equipos: equiposConDetalle }
+    });
+  } catch (error) {
+    console.error('Error obteniendo equipos del jugador:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
 // Agregar jugador a un equipo
 const agregarJugadorAEquipo = async (req, res) => {
   try {
@@ -397,6 +436,79 @@ const agregarJugadorAEquipo = async (req, res) => {
   }
 };
 
+// Actualizar jugador
+const actualizarJugador = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, apellido, posicion, numeroCamiseta, activo } = req.body;
+
+    const jugador = await Jugador.findByIdAndUpdate(
+      id,
+      {
+        ...(nombre !== undefined && { nombre: String(nombre).trim() }),
+        ...(apellido !== undefined && { apellido: String(apellido).trim() }),
+        ...(posicion !== undefined && { posicion }),
+        ...(numeroCamiseta !== undefined && { numeroCamiseta: numeroCamiseta || null }),
+        ...(activo !== undefined && { activo: activo !== false })
+      },
+      { new: true, runValidators: true }
+    )
+      .populate('usuario', 'nombre email')
+      .populate('estadisticasPorEquipo.equipo', 'nombre tipo');
+
+    if (!jugador) {
+      return res.status(404).json({
+        success: false,
+        message: 'Jugador no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Jugador actualizado exitosamente',
+      data: { jugador }
+    });
+  } catch (error) {
+    console.error('Error actualizando jugador:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Eliminar jugador (soft delete - desactivar)
+const eliminarJugador = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const jugador = await Jugador.findByIdAndUpdate(
+      id,
+      { activo: false },
+      { new: true }
+    );
+
+    if (!jugador) {
+      return res.status(404).json({
+        success: false,
+        message: 'Jugador no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Jugador desactivado exitosamente',
+      data: { jugador }
+    });
+  } catch (error) {
+    console.error('Error eliminando jugador:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
 // Remover jugador de un equipo
 const removerJugadorDeEquipo = async (req, res) => {
   try {
@@ -436,6 +548,9 @@ module.exports = {
   crearJugador,
   obtenerJugador,
   obtenerJugadores,
+  actualizarJugador,
+  eliminarJugador,
+  obtenerEquiposJugador,
   actualizarEstadisticasJugador,
   obtenerEstadisticasJugador,
   obtenerRankingJugadores,

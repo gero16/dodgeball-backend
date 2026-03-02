@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const { adminAuth } = require('../middleware/auth');
 const {
   crearJugador,
   obtenerJugador,
   obtenerJugadores,
+  actualizarJugador,
+  eliminarJugador,
+  obtenerEquiposJugador,
   actualizarEstadisticasJugador,
   obtenerEstadisticasJugador,
   obtenerRankingJugadores,
@@ -11,28 +15,19 @@ const {
   removerJugadorDeEquipo
 } = require('../controllers/jugadorController');
 
-// Crear jugador
-router.post('/', crearJugador);
-
-// Obtener jugador por ID
-router.get('/:id', obtenerJugador);
-
-// Obtener todos los jugadores
+// Rutas públicas (lectura)
 router.get('/', obtenerJugadores);
-
-// Obtener estadísticas de jugador
+router.get('/ranking/lista', obtenerRankingJugadores);
+router.get('/:id/equipos', obtenerEquiposJugador);
+router.get('/:id', obtenerJugador);
 router.get('/:jugadorId/estadisticas', obtenerEstadisticasJugador);
 
-// Obtener ranking de jugadores
-router.get('/ranking/lista', obtenerRankingJugadores);
-
-// Actualizar estadísticas de jugador en partido
-router.put('/:jugadorId/partido/:partidoId/equipo/:equipoId/estadisticas', actualizarEstadisticasJugador);
-
-// Agregar jugador a equipo
-router.post('/:jugadorId/equipos/:equipoId', agregarJugadorAEquipo);
-
-// Remover jugador de equipo
-router.delete('/:jugadorId/equipos/:equipoId', removerJugadorDeEquipo);
+// Rutas protegidas (admin)
+router.post('/', adminAuth, crearJugador);
+router.put('/:id', adminAuth, actualizarJugador);
+router.delete('/:id', adminAuth, eliminarJugador);
+router.put('/:jugadorId/partido/:partidoId/equipo/:equipoId/estadisticas', adminAuth, actualizarEstadisticasJugador);
+router.post('/:jugadorId/equipos/:equipoId', adminAuth, agregarJugadorAEquipo);
+router.delete('/:jugadorId/equipos/:equipoId', adminAuth, removerJugadorDeEquipo);
 
 module.exports = router;
