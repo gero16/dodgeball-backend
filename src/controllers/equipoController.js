@@ -100,6 +100,45 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
     const norm = (s) => (s || '').toString().trim().toLowerCase();
     const nombreNorm = norm(nombre);
 
+    // Top 3: usar Estadistica (agregada en todos los eventos del equipo)
+    let topJugadores = [];
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const equipoDoc = await Equipo.findOne({
+      nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
+      activo: true
+    }).select('_id').lean();
+    if (equipoDoc) {
+      const topAgg = await Estadistica.aggregate([
+        { $match: { equipo: equipoDoc._id, activo: true } },
+        { $group: {
+          _id: '$jugador',
+          hits: { $sum: '$hits' },
+          quemados: { $sum: '$quemados' },
+          catches: { $sum: '$catches' },
+          bloqueos: { $sum: '$bloqueos' },
+          esquives: { $sum: '$esquives' },
+          indicePoder: { $sum: '$indicePoder' }
+        }},
+        { $sort: { indicePoder: -1 } },
+        { $limit: 3 },
+        { $lookup: { from: 'jugadores', localField: '_id', foreignField: '_id', as: 'j' } },
+        { $unwind: { path: '$j', preserveNullAndEmptyArrays: true } }
+      ]);
+      topJugadores = topAgg.map((r) => {
+        const j = r.j || {};
+        const nombreJugador = [j.nombre, j.apellido].filter(Boolean).join(' ').trim() || 'Jugador';
+        return {
+          nombreJugador,
+          hits: Number(r.hits) || 0,
+          quemados: Number(r.quemados) || 0,
+          catches: Number(r.catches) || 0,
+          bloqueos: Number(r.bloqueos) || 0,
+          esquives: Number(r.esquives) || 0,
+          poderLiga: Number(r.indicePoder) || 0
+        };
+      });
+    }
+
     const eventos = await Evento.find({ activo: true })
       .select('titulo datosEspecificos')
       .lean();
@@ -167,21 +206,6 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
 
       const ligaStats = liga?.estadisticasLiga || campeonato?.estadisticasLiga || torneo?.estadisticasLiga || [];
       if (ligaStats.length > 0) {
-        const jugadoresEquipo = ligaStats
-          .filter((j) => norm(j.equipoNombre) === nombreNorm)
-          .map((j) => ({
-            nombreJugador: (j.nombreJugador || '').toString().trim(),
-            hits: Number(j.hits) || 0,
-            poderLiga: Number(j.poderLiga) || 0
-          }))
-          .filter((j) => j.nombreJugador);
-        jugadoresEquipo.sort((a, b) => (b.poderLiga || 0) - (a.poderLiga || 0));
-        const top3 = jugadoresEquipo.slice(0, 3);
-        if (eventoIdPref && ev._id.toString() === eventoIdPref) {
-          topJugadores = top3;
-        }
-        if (topJugadores.length === 0) topJugadores = top3;
-
         // Agregar estadísticas detalladas del equipo (suma de todos los jugadores)
         const jugadoresStats = ligaStats.filter((j) => norm(j.equipoNombre) === nombreNorm);
         for (const j of jugadoresStats) {
@@ -201,32 +225,15 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       }
     }
 
-    if (eventoIdPref && mongoose.Types.ObjectId.isValid(eventoIdPref)) {
-      const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const equipoDoc = await Equipo.findOne({
-        nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
+    if (eventoIdPref && mongoose.Types.ObjectId.isValid(eventoIdPref) && equipoDoc) {
+      const stats = await Estadistica.find({
+        evento: new mongoose.Types.ObjectId(eventoIdPref),
+        equipo: equipoDoc._id,
         activo: true
-      }).select('_id').lean();
-      if (equipoDoc) {
-        const stats = await Estadistica.find({
-          evento: new mongoose.Types.ObjectId(eventoIdPref),
-          equipo: equipoDoc._id,
-          activo: true
-        })
-          .populate('jugador', 'nombre apellido')
-          .sort({ indicePoder: -1 })
-          .lean();
-        if (topJugadores.length === 0) {
-          topJugadores = stats.slice(0, 3).map((s) => ({
-            nombreJugador: s.jugador ? ((s.jugador.nombre || '').trim() + ' ' + (s.jugador.apellido || '').trim()).trim() || 'Jugador' : 'Jugador',
-            hits: Number(s.hits) || 0,
-            poderLiga: Number(s.indicePoder) || 0
-          }));
-        }
-        // Agregar estadísticas detalladas desde colección Estadistica (si no hay ligaStats)
-        const tieneStatsDetalladas = statsAcum.hits > 0 || statsAcum.catches > 0 || statsAcum.tirosTotales > 0;
-        if (!tieneStatsDetalladas && stats.length > 0) {
-          for (const s of stats) {
+      }).lean();
+      const tieneStatsDetalladas = statsAcum.hits > 0 || statsAcum.catches > 0 || statsAcum.tirosTotales > 0;
+      if (!tieneStatsDetalladas && stats.length > 0) {
+        for (const s of stats) {
             statsAcum.hits += Number(s.hits) || 0;
             statsAcum.catches += Number(s.catches) || 0;
             statsAcum.esquives += Number(s.esquives) || 0;
@@ -239,7 +246,6 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
             statsAcum.catchesIntentos += Number(s.catchesIntentos || s.catchesIntentados) || 0;
             statsAcum.catchesRecibidos += Number(s.catchesRecibidos) || 0;
             statsAcum.bloqueosIntentos += Number(s.bloqueosIntentos || s.bloqueosIntentados) || 0;
-          }
         }
       }
     }
