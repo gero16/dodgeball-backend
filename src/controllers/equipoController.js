@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 const Equipo = require('../models/Equipo');
 const Jugador = require('../models/Jugador');
 const Evento = require('../models/Evento');
+const Estadistica = require('../models/Estadistica');
 
 // Crear nuevo equipo
 const crearEquipo = async (req, res) => {
@@ -90,6 +92,7 @@ const obtenerEquipoPorNombre = async (req, res) => {
 const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
   try {
     const nombre = decodeURIComponent(req.params.nombre || '').trim();
+    const eventoIdPref = (req.query.eventoId || '').toString().trim();
     if (!nombre) {
       return res.status(400).json({ success: false, message: 'Nombre requerido' });
     }
@@ -112,7 +115,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       golesFavor: 0,
       golesContra: 0
     };
-    const jugadoresMap = new Map();
+    let topJugadores = [];
 
     for (const ev of eventos) {
       const liga = ev.datosEspecificos?.liga;
@@ -150,22 +153,48 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       statsAcum.golesContra += Number(eq.golesContra) || 0;
 
       const ligaStats = liga?.estadisticasLiga || campeonato?.estadisticasLiga || torneo?.estadisticasLiga || [];
-      for (const j of ligaStats) {
-        if (norm(j.equipoNombre) !== nombreNorm) continue;
-        const nombreJug = (j.nombreJugador || '').toString().trim();
-        if (!nombreJug) continue;
-        const key = norm(nombreJug);
-        const acc = jugadoresMap.get(key) || { nombreJugador: nombreJug, hits: 0, catches: 0, partidosJugados: 0 };
-        acc.hits += Number(j.hits) || 0;
-        acc.catches += Number(j.catches) || 0;
-        acc.partidosJugados += Number(j.partidosJugados) || 0;
-        jugadoresMap.set(key, acc);
+      if (ligaStats.length > 0) {
+        const jugadoresEquipo = ligaStats
+          .filter((j) => norm(j.equipoNombre) === nombreNorm)
+          .map((j) => ({
+            nombreJugador: (j.nombreJugador || '').toString().trim(),
+            hits: Number(j.hits) || 0,
+            poderLiga: Number(j.poderLiga) || 0
+          }))
+          .filter((j) => j.nombreJugador);
+        jugadoresEquipo.sort((a, b) => (b.poderLiga || 0) - (a.poderLiga || 0));
+        const top3 = jugadoresEquipo.slice(0, 3);
+        if (eventoIdPref && ev._id.toString() === eventoIdPref) {
+          topJugadores = top3;
+          break;
+        }
+        if (topJugadores.length === 0) topJugadores = top3;
       }
     }
 
-    const topJugadores = Array.from(jugadoresMap.values())
-      .sort((a, b) => (b.hits || 0) - (a.hits || 0))
-      .slice(0, 3);
+    if (topJugadores.length === 0 && eventoIdPref && mongoose.Types.ObjectId.isValid(eventoIdPref)) {
+      const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const equipoDoc = await Equipo.findOne({
+        nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
+        activo: true
+      }).select('_id').lean();
+      if (equipoDoc) {
+        const stats = await Estadistica.find({
+          evento: new mongoose.Types.ObjectId(eventoIdPref),
+          equipo: equipoDoc._id,
+          activo: true
+        })
+          .populate('jugador', 'nombre apellido')
+          .sort({ indicePoder: -1 })
+          .limit(3)
+          .lean();
+        topJugadores = stats.map((s) => ({
+          nombreJugador: s.jugador ? `${(s.jugador.nombre || '').trim()} ${(s.jugador.apellido || '').trim()`.trim() || 'Jugador' : 'Jugador',
+          hits: Number(s.hits) || 0,
+          poderLiga: Number(s.indicePoder) || 0
+        }));
+      }
+    }
 
     partidosTodos.sort((a, b) => {
       const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
