@@ -428,6 +428,7 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
           jugador: jugadorId,
           evento: evento._id.toString(),
           temporada,
+          partidosJugados: 0,
           setsJugados: 0,
           tirosTotales: 0,
           hits: 0,
@@ -447,6 +448,7 @@ async function recalcularEstadisticasLigaDesdePartidos(eventoId) {
         });
       }
 
+      bump(key, 'partidosJugados', 1);
       bump(key, 'setsJugados', ps.setsJugados);
       bump(key, 'tirosTotales', ps.tirosTotales);
       bump(key, 'hits', ps.hits);
@@ -1276,6 +1278,7 @@ const upsertEstadisticasJugadores = async (req, res) => {
       const bloqueos = parseInt(j.bloqueos) || 0;
       const pisoLinea = parseInt(j.pisoLinea) || 0;
       const catchesRecibidos = parseInt(j.catchesRecibidos) || 0;
+      const partidosJugados = parseInt(j.partidosJugados) || 0;
       const setsJugados = parseInt(j.setsJugados) || 0;
       const indicePoder = Number(j.poderLiga || j.indicePoder || 0);
 
@@ -1283,6 +1286,7 @@ const upsertEstadisticasJugadores = async (req, res) => {
         equipo: equipoDoc._id,
         jugador: jugadorDoc._id,
         evento: evento._id,
+        partidosJugados,
         setsJugados,
         tirosTotales,
         hits,
@@ -1382,6 +1386,7 @@ const syncEstadisticasLigaAEstadisticaPorEvento = async (eventoId, jugadores) =>
     const bloqueos = parseInt(j.bloqueos) || 0;
     const pisoLinea = parseInt(j.pisoLinea) || 0;
     const catchesRecibidos = parseInt(j.catchesRecibidos) || 0;
+    const partidosJugados = parseInt(j.partidosJugados) || 0;
     const setsJugados = parseInt(j.setsJugados) || 0;
     const indicePoder = Number(j.poderLiga || j.indicePoder || 0);
 
@@ -1389,6 +1394,7 @@ const syncEstadisticasLigaAEstadisticaPorEvento = async (eventoId, jugadores) =>
       equipo: equipoDoc._id,
       jugador: jugadorDoc._id,
       evento: evento._id,
+      partidosJugados,
       setsJugados,
       tirosTotales,
       hits,

@@ -18,6 +18,11 @@ const estadisticaSchema = new mongoose.Schema({
   },
   
   // Estadísticas básicas
+  partidosJugados: {
+    type: Number,
+    default: 0,
+    min: [0, 'Los partidos jugados no pueden ser negativos']
+  },
   setsJugados: {
     type: Number,
     default: 0,

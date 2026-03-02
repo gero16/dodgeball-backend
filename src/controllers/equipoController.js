@@ -115,6 +115,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
         { $match: { equipo: equipoDoc._id, activo: true, jugador: { $ne: null } } },
         { $group: {
           _id: '$jugador',
+          setsJugados: { $sum: '$setsJugados' },
           hits: { $sum: '$hits' },
           quemados: { $sum: '$quemados' },
           catches: { $sum: '$catches' },
@@ -132,6 +133,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       const jugadorMap = new Map(jugadores.map((j) => [j._id.toString(), [j.nombre, j.apellido].filter(Boolean).join(' ').trim() || 'Jugador']));
       topJugadores = topAgg.map((r) => ({
         nombreJugador: jugadorMap.get(r._id?.toString()) || 'Jugador',
+        setsJugados: Number(r.setsJugados) || 0,
         hits: Number(r.hits) || 0,
         quemados: Number(r.quemados) || 0,
         catches: Number(r.catches) || 0,
