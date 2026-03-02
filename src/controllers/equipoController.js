@@ -179,7 +179,6 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
         const top3 = jugadoresEquipo.slice(0, 3);
         if (eventoIdPref && ev._id.toString() === eventoIdPref) {
           topJugadores = top3;
-          break;
         }
         if (topJugadores.length === 0) topJugadores = top3;
 
