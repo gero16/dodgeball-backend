@@ -1,5 +1,6 @@
 const Equipo = require('../models/Equipo');
 const Jugador = require('../models/Jugador');
+const Evento = require('../models/Evento');
 
 // Crear nuevo equipo
 const crearEquipo = async (req, res) => {
@@ -78,6 +79,92 @@ const obtenerEquipoPorNombre = async (req, res) => {
     });
   } catch (error) {
     console.error('Error obteniendo equipo por nombre:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener partidos y estadísticas agregadas de un equipo en todos los eventos
+const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
+  try {
+    const nombre = decodeURIComponent(req.params.nombre || '').trim();
+    if (!nombre) {
+      return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    }
+
+    const norm = (s) => (s || '').toString().trim().toLowerCase();
+    const nombreNorm = norm(nombre);
+
+    const eventos = await Evento.find({ activo: true })
+      .select('titulo datosEspecificos')
+      .lean();
+
+    const partidosTodos = [];
+    const equiposPorEvento = {};
+    const statsAcum = {
+      puntos: 0,
+      partidosJugados: 0,
+      partidosGanados: 0,
+      partidosEmpatados: 0,
+      partidosPerdidos: 0,
+      golesFavor: 0,
+      golesContra: 0
+    };
+
+    for (const ev of eventos) {
+      const liga = ev.datosEspecificos?.liga;
+      const campeonato = ev.datosEspecificos?.campeonato;
+      const torneo = ev.datosEspecificos?.torneo;
+      const equipos = liga?.equipos || campeonato?.equipos || torneo?.equipos || [];
+      const partidos = liga?.partidos || campeonato?.partidos || torneo?.partidos || [];
+
+      const equipoEnEvento = equipos.find((e) => norm(e.nombre) === nombreNorm);
+      if (!equipoEnEvento) continue;
+
+      equiposPorEvento[ev._id.toString()] = equipos;
+
+      const partidosDelEquipo = (partidos || []).filter(
+        (p) => !p.libre && (
+          norm(p.equipoLocal) === nombreNorm || norm(p.equipoVisitante) === nombreNorm
+        )
+      );
+
+      for (const p of partidosDelEquipo) {
+        partidosTodos.push({
+          ...p,
+          _eventoId: ev._id.toString(),
+          _eventoTitulo: ev.titulo || ''
+        });
+      }
+
+      const eq = equipoEnEvento;
+      statsAcum.puntos += Number(eq.puntos) || 0;
+      statsAcum.partidosJugados += Number(eq.partidosJugados) || 0;
+      statsAcum.partidosGanados += Number(eq.partidosGanados) || 0;
+      statsAcum.partidosEmpatados += Number(eq.partidosEmpatados) || 0;
+      statsAcum.partidosPerdidos += Number(eq.partidosPerdidos) || 0;
+      statsAcum.golesFavor += Number(eq.golesFavor) || 0;
+      statsAcum.golesContra += Number(eq.golesContra) || 0;
+    }
+
+    partidosTodos.sort((a, b) => {
+      const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
+      const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
+      return fb - fa;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        partidos: partidosTodos,
+        estadisticas: statsAcum,
+        equiposPorEvento
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo partidos y estadísticas del equipo:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -277,6 +364,7 @@ module.exports = {
   obtenerEquipo,
   obtenerEquipos,
   obtenerEquipoPorNombre,
+  obtenerPartidosYEstadisticasEquipo,
   actualizarEquipo,
   eliminarEquipo,
   obtenerJugadoresEquipo

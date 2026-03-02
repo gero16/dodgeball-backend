@@ -5,6 +5,7 @@ const {
   obtenerEquipo,
   obtenerEquipos,
   obtenerEquipoPorNombre,
+  obtenerPartidosYEstadisticasEquipo,
   actualizarEquipo,
   eliminarEquipo,
   obtenerJugadoresEquipo
@@ -15,6 +16,9 @@ router.post('/', crearEquipo);
 
 // Obtener todos los equipos
 router.get('/', obtenerEquipos);
+
+// Partidos y estadísticas agregadas (más específico, debe ir antes de /by-name/:nombre)
+router.get('/by-name/:nombre/partidos-y-estadisticas', obtenerPartidosYEstadisticasEquipo);
 
 // Obtener equipo por nombre (debe ir antes de /:id)
 router.get('/by-name/:nombre', obtenerEquipoPorNombre);
