@@ -112,6 +112,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       golesFavor: 0,
       golesContra: 0
     };
+    const jugadoresMap = new Map();
 
     for (const ev of eventos) {
       const liga = ev.datosEspecificos?.liga;
@@ -147,7 +148,24 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       statsAcum.partidosPerdidos += Number(eq.partidosPerdidos) || 0;
       statsAcum.golesFavor += Number(eq.golesFavor) || 0;
       statsAcum.golesContra += Number(eq.golesContra) || 0;
+
+      const ligaStats = liga?.estadisticasLiga || campeonato?.estadisticasLiga || torneo?.estadisticasLiga || [];
+      for (const j of ligaStats) {
+        if (norm(j.equipoNombre) !== nombreNorm) continue;
+        const nombreJug = (j.nombreJugador || '').toString().trim();
+        if (!nombreJug) continue;
+        const key = norm(nombreJug);
+        const acc = jugadoresMap.get(key) || { nombreJugador: nombreJug, hits: 0, catches: 0, partidosJugados: 0 };
+        acc.hits += Number(j.hits) || 0;
+        acc.catches += Number(j.catches) || 0;
+        acc.partidosJugados += Number(j.partidosJugados) || 0;
+        jugadoresMap.set(key, acc);
+      }
     }
+
+    const topJugadores = Array.from(jugadoresMap.values())
+      .sort((a, b) => (b.hits || 0) - (a.hits || 0))
+      .slice(0, 3);
 
     partidosTodos.sort((a, b) => {
       const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
@@ -160,7 +178,8 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       data: {
         partidos: partidosTodos,
         estadisticas: statsAcum,
-        equiposPorEvento
+        equiposPorEvento,
+        topJugadores
       }
     });
   } catch (error) {
