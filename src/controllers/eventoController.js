@@ -206,28 +206,16 @@ async function getOrCreateJugadorByNombre(nombreCompleto, equipoDoc) {
       nombre,
       apellido,
       posicion: 'versatil',
-      activo: true,
-      estadisticasPorEquipo: equipoDoc ? [{
-        equipo: equipoDoc._id,
-        nombreEquipo: equipoDoc.nombre,
-        tipoEquipo: equipoDoc.tipo || 'club',
-        temporada: '2024-2025'
-      }] : []
+      activo: true
     });
-  } else if (equipoDoc) {
-    // Asegurar vínculo en estadisticasPorEquipo
-    const exists = Array.isArray(jugador.estadisticasPorEquipo)
-      ? jugador.estadisticasPorEquipo.some(e => e.equipo?.toString() === equipoDoc._id.toString())
-      : false;
-    if (!exists) {
-      jugador.estadisticasPorEquipo = Array.isArray(jugador.estadisticasPorEquipo) ? jugador.estadisticasPorEquipo : [];
-      jugador.estadisticasPorEquipo.push({
-        equipo: equipoDoc._id,
-        nombreEquipo: equipoDoc.nombre,
-        tipoEquipo: equipoDoc.tipo || 'club',
-        temporada: '2024-2025'
-      });
-      await jugador.save();
+    if (equipoDoc) {
+      const yaEnEquipo = equipoDoc.jugadores?.some((j) => j.jugador?.toString() === jugador._id.toString());
+      if (!yaEnEquipo) {
+        await Equipo.updateOne(
+          { _id: equipoDoc._id },
+          { $push: { jugadores: { jugador: jugador._id } } }
+        );
+      }
     }
   }
 
@@ -273,23 +261,27 @@ async function findJugadorByNombre(nombreCompleto, equipoNombreNormalizado, team
 
   if (!jugador) return null;
 
-  const statsEquipos = Array.isArray(jugador.estadisticasPorEquipo) ? jugador.estadisticasPorEquipo : [];
-  const matchEquipo = statsEquipos.find((e) => normalizeName(e?.nombreEquipo) === equipoNombreNormalizado);
-  if (matchEquipo) {
-    return { jugador, equipoId: matchEquipo.equipo?.toString() || null };
+  const equiposDb = await Equipo.find({ activo: true }).select('nombre jugadores').lean();
+  const equipoMatch = equiposDb.find(
+    (e) => normalizeName(e.nombre) === equipoNombreNormalizado &&
+      (e.jugadores || []).some((j) => (j.jugador?.toString?.() || String(j.jugador)) === jugador._id.toString())
+  );
+  if (equipoMatch) {
+    return { jugador, equipoId: equipoMatch._id.toString() };
   }
 
-  // Fallback: intentar alias de equipo (ej. plural/singular, The)
   const aliasName = teamAliasResolver?.tryMatch?.(equipoNombreNormalizado) || null;
   if (aliasName) {
     const aliasNorm = normalizeName(aliasName);
-    const aliasMatch = statsEquipos.find((e) => normalizeName(e?.nombreEquipo) === aliasNorm);
+    const aliasMatch = equiposDb.find(
+      (e) => normalizeName(e.nombre) === aliasNorm &&
+        (e.jugadores || []).some((j) => (j.jugador?.toString?.() || String(j.jugador)) === jugador._id.toString())
+    );
     if (aliasMatch) {
-      return { jugador, equipoId: aliasMatch.equipo?.toString() || null };
+      return { jugador, equipoId: aliasMatch._id.toString() };
     }
   }
 
-  // Si no hay match de equipo en stats, devolvemos jugador sin equipo
   return { jugador, equipoId: null };
 }
 
@@ -2325,81 +2317,6 @@ const procesarHojaCalculoEstadisticas = async (req, res) => {
     };
     await evento.save();
 
-    // Actualizar estadísticas generales de jugadores desde el resumen
-    let jugadoresActualizados = 0;
-    let jugadoresNoEncontrados = [];
-    try {
-      const resumen = evento.datosEspecificos?.liga?.resumenEstadisticas;
-      if (resumen?.categories) {
-        const totalPorJugador = {};
-        for (const dataCat of Object.values(resumen.categories)) {
-          for (const [jug, info] of Object.entries(dataCat.jugadores || {})) {
-            if (!totalPorJugador[jug]) totalPorJugador[jug] = {};
-            for (const [k, v] of Object.entries(info.totals || {})) {
-              totalPorJugador[jug][k] = (totalPorJugador[jug][k] || 0) + (Number(v) || 0);
-            }
-          }
-        }
-
-        const normalize = (s) => (s || '')
-          .toString()
-          .normalize('NFD')
-          .replace(/\p{Diacritic}+/gu, '')
-          .toLowerCase()
-          .trim();
-
-        const jugadoresDocs = await Jugador.find({ activo: true }).lean(false);
-        const index = new Map();
-        for (const j of jugadoresDocs) {
-          index.set(normalize(j.nombre), j);
-          index.set(normalize(`${j.nombre} ${j.apellido}`), j);
-        }
-
-        const keyMap = {
-          tirosTotales: 'tirosTotales',
-          hits: 'hits',
-          quemados: 'quemados',
-          asistencias: 'asistencias',
-          tirosRecibidos: 'tirosRecibidos',
-          tirosRecibidosAcertados: 'hitsRecibidos',
-          esquives: 'esquives',
-          esquivesSinEsfuerzo: 'esquivesExitosos',
-          ponchado: 'ponchado',
-          catches: 'catches',
-          catchesIntentos: 'catchesIntentos',
-          catchesRecibidos: 'catchesRecibidos',
-          bloqueos: 'bloqueos',
-          bloqueosIntentos: 'bloqueosIntentos',
-          tarjetasAmarillas: 'tarjetasAmarillas',
-          tarjetasRojas: 'tarjetasRojas',
-          pisoLinea: 'pisoLinea',
-          setsJugados: 'setsJugados',
-          indiceAtaque: 'indiceAtaque',
-          indiceDefensa: 'indiceDefensa',
-          ponderadorSet: 'puntos'
-        };
-
-        for (const [jugadorNombre, totals] of Object.entries(totalPorJugador)) {
-          const doc = index.get(normalize(jugadorNombre));
-          if (!doc) {
-            jugadoresNoEncontrados.push(jugadorNombre);
-            continue;
-          }
-          const eg = doc.estadisticasGenerales || {};
-          for (const [k, v] of Object.entries(totals)) {
-            const field = keyMap[k];
-            if (!field) continue;
-            eg[field] = (eg[field] || 0) + (Number(v) || 0);
-          }
-          doc.estadisticasGenerales = eg;
-          await doc.save();
-          jugadoresActualizados++;
-        }
-      }
-    } catch (e) {
-      console.error('Error actualizando jugadores desde resumen:', e);
-    }
-
     // Eliminar el archivo temporal
     try {
       fs.unlinkSync(filePath);
@@ -2414,9 +2331,7 @@ const procesarHojaCalculoEstadisticas = async (req, res) => {
         partidosActualizados,
         partidosNoEncontrados: partidosNoEncontrados.length > 0 ? partidosNoEncontrados : undefined,
         errores: errores.length > 0 ? errores : undefined,
-        totalFilas: data.length,
-        jugadoresActualizados,
-        jugadoresNoEncontrados: jugadoresNoEncontrados.length ? jugadoresNoEncontrados : undefined
+        totalFilas: data.length
       }
     });
 

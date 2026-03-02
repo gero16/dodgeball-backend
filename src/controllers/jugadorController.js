@@ -1,11 +1,12 @@
 const Jugador = require('../models/Jugador');
 const Equipo = require('../models/Equipo');
 const Evento = require('../models/Evento');
+const Estadistica = require('../models/Estadistica');
 
 // Crear nuevo jugador
 const crearJugador = async (req, res) => {
   try {
-    const { usuario, nombre, apellido, fechaNacimiento, posicion, numeroCamiseta, email, telefono, equipo, estadisticasGenerales, estadisticasPorEquipo, activo } = req.body;
+    const { usuario, nombre, apellido, fechaNacimiento, posicion, numeroCamiseta, email, telefono, equipo, activo } = req.body;
 
     // Si se proporciona un usuario, verificar que existe
     if (usuario) {
@@ -38,8 +39,6 @@ const crearJugador = async (req, res) => {
       email,
       telefono,
       equipo,
-      estadisticasGenerales,
-      estadisticasPorEquipo,
       activo
     });
 
@@ -66,8 +65,7 @@ const obtenerJugador = async (req, res) => {
     const { id } = req.params;
 
     const jugador = await Jugador.findById(id)
-      .populate('usuario', 'nombre email')
-      .populate('estadisticasPorEquipo.equipo', 'nombre tipo pais ciudad');
+      .populate('usuario', 'nombre email');
 
     if (!jugador) {
       return res.status(404).json({
@@ -105,16 +103,17 @@ const obtenerJugadores = async (req, res) => {
       query.posicion = posicion;
     }
 
-    if (equipo) {
-      query['estadisticasPorEquipo.equipo'] = equipo;
-    }
-
     const skip = (parseInt(pagina) - 1) * parseInt(limite);
+
+    if (equipo) {
+      const equipoDoc = await Equipo.findById(equipo).select('jugadores').lean();
+      const jugadorIds = (equipoDoc?.jugadores || []).map((j) => j.jugador).filter(Boolean);
+      query._id = jugadorIds.length > 0 ? { $in: jugadorIds } : { $in: [] };
+    }
 
     const jugadores = await Jugador.find(query)
       .populate('usuario', 'nombre email')
-      .populate('estadisticasPorEquipo.equipo', 'nombre tipo')
-      .sort({ 'estadisticasGenerales.puntos': -1 })
+      .sort({ nombre: 1, apellido: 1 })
       .skip(skip)
       .limit(parseInt(limite))
       .lean();
@@ -168,105 +167,56 @@ const obtenerJugadores = async (req, res) => {
   }
 };
 
-// Actualizar estadísticas de un jugador en un partido
+// Actualizar estadísticas de un jugador en un partido (usa tabla Estadistica)
 const actualizarEstadisticasJugador = async (req, res) => {
   try {
     const { jugadorId, partidoId, equipoId } = req.params;
     const { estadisticas } = req.body;
 
-    // Buscar el jugador
     const jugador = await Jugador.findById(jugadorId);
     if (!jugador) {
-      return res.status(404).json({
-        success: false,
-        message: 'Jugador no encontrado'
-      });
+      return res.status(404).json({ success: false, message: 'Jugador no encontrado' });
     }
-
-    // Buscar el partido
     const evento = await Evento.findById(partidoId);
     if (!evento) {
-      return res.status(404).json({
-        success: false,
-        message: 'Partido no encontrado'
-      });
+      return res.status(404).json({ success: false, message: 'Partido no encontrado' });
     }
-
-    // Buscar el equipo
     const equipo = await Equipo.findById(equipoId);
     if (!equipo) {
-      return res.status(404).json({
-        success: false,
-        message: 'Equipo no encontrado'
-      });
+      return res.status(404).json({ success: false, message: 'Equipo no encontrado' });
     }
 
-    // Actualizar estadísticas generales
-    const statsGenerales = jugador.estadisticasGenerales;
-    statsGenerales.partidosJugados += 1;
-    statsGenerales.hits += estadisticas.hits || 0;
-    statsGenerales.hitsExitosos += estadisticas.hitsExitosos || 0;
-    statsGenerales.catches += estadisticas.catches || 0;
-    statsGenerales.catchesExitosos += estadisticas.catchesExitosos || 0;
-    statsGenerales.dodges += estadisticas.dodges || 0;
-    statsGenerales.dodgesExitosos += estadisticas.dodgesExitosos || 0;
-    statsGenerales.bloqueos += estadisticas.bloqueos || 0;
-    statsGenerales.bloqueosExitosos += estadisticas.bloqueosExitosos || 0;
-    statsGenerales.tarjetasAmarillas += estadisticas.tarjetasAmarillas || 0;
-    statsGenerales.tarjetasRojas += estadisticas.tarjetasRojas || 0;
-    statsGenerales.eliminaciones += estadisticas.eliminaciones || 0;
-    statsGenerales.vecesEliminado += estadisticas.vecesEliminado || 0;
-    statsGenerales.minutosJugados += estadisticas.minutosJugados || 0;
-    statsGenerales.puntos += estadisticas.puntos || 0;
+    const temporada = evento?.datosEspecificos?.liga?.temporada || new Date().getFullYear().toString();
+    const update = {
+      setsJugados: estadisticas.setsJugados || 1,
+      hits: estadisticas.hits || 0,
+      quemados: estadisticas.quemados || estadisticas.outs || 0,
+      asistencias: estadisticas.asistencias || 0,
+      tirosRecibidos: estadisticas.tirosRecibidos || 0,
+      hitsRecibidos: estadisticas.hitsRecibidos || 0,
+      esquives: estadisticas.esquives || estadisticas.dodges || 0,
+      esquivesSinEsfuerzo: estadisticas.esquivesExitosos || estadisticas.dodgesExitosos || 0,
+      ponchado: estadisticas.ponchado || 0,
+      catchesIntentados: estadisticas.catchesIntentos || 0,
+      catches: estadisticas.catches || 0,
+      bloqueosIntentados: estadisticas.bloqueosIntentos || 0,
+      bloqueos: estadisticas.bloqueos || 0,
+      pisoLinea: estadisticas.pisoLinea || 0,
+      catchesRecibidos: estadisticas.catchesRecibidos || 0,
+      tirosTotales: estadisticas.tirosTotales || 0
+    };
 
-    // Actualizar estadísticas por equipo
-    let statsEquipo = jugador.estadisticasPorEquipo.find(
-      stat => stat.equipo.toString() === equipoId
+    const estadistica = await Estadistica.findOneAndUpdate(
+      { jugador: jugadorId, equipo: equipoId, evento: partidoId },
+      { $set: { ...update, temporada, activo: true } },
+      { new: true, upsert: true }
     );
-
-    if (!statsEquipo) {
-      // Si no existe, crear nueva entrada
-      statsEquipo = {
-        equipo: equipoId,
-        nombreEquipo: equipo.nombre,
-        tipoEquipo: equipo.tipo,
-        temporada: new Date().getFullYear().toString(),
-        estadisticas: {
-          partidosJugados: 0,
-          hits: 0,
-          catches: 0,
-          dodges: 0,
-          bloqueos: 0,
-          puntos: 0
-        }
-      };
-      jugador.estadisticasPorEquipo.push(statsEquipo);
-    }
-
-    // Actualizar estadísticas del equipo específico
-    statsEquipo.estadisticas.partidosJugados += 1;
-    statsEquipo.estadisticas.hits += estadisticas.hits || 0;
-    statsEquipo.estadisticas.catches += estadisticas.catches || 0;
-    statsEquipo.estadisticas.dodges += estadisticas.dodges || 0;
-    statsEquipo.estadisticas.bloqueos += estadisticas.bloqueos || 0;
-    statsEquipo.estadisticas.puntos += estadisticas.puntos || 0;
-
-    // Agregar al historial
-    jugador.historialPartidos.push({
-      partido: partidoId,
-      equipo: statsEquipo.nombreEquipo,
-      fecha: new Date(),
-      estadisticas: estadisticas
-    });
-
-    await jugador.save();
 
     res.json({
       success: true,
       message: 'Estadísticas actualizadas exitosamente',
-      data: { jugador }
+      data: { estadistica }
     });
-
   } catch (error) {
     console.error('Error actualizando estadísticas:', error);
     res.status(500).json({
@@ -276,15 +226,14 @@ const actualizarEstadisticasJugador = async (req, res) => {
   }
 };
 
-// Obtener estadísticas de un jugador
+// Obtener estadísticas de un jugador (agregadas desde tabla Estadistica)
 const obtenerEstadisticasJugador = async (req, res) => {
   try {
     const { jugadorId } = req.params;
-    const { equipoId, temporada } = req.query;
+    const { equipoId, eventoId } = req.query;
 
     const jugador = await Jugador.findById(jugadorId)
-      .populate('usuario', 'nombre email')
-      .populate('estadisticasPorEquipo.equipo', 'nombre tipo pais ciudad');
+      .populate('usuario', 'nombre email');
 
     if (!jugador) {
       return res.status(404).json({
@@ -293,17 +242,51 @@ const obtenerEstadisticasJugador = async (req, res) => {
       });
     }
 
-    let estadisticas = jugador.estadisticasGenerales;
+    const match = { jugador: jugadorId, activo: true };
+    if (equipoId) match.equipo = equipoId;
+    if (eventoId) match.evento = eventoId;
 
-    // Si se especifica un equipo, devolver estadísticas de ese equipo
-    if (equipoId) {
-      const statsEquipo = jugador.estadisticasPorEquipo.find(
-        stat => stat.equipo.toString() === equipoId
-      );
-      if (statsEquipo) {
-        estadisticas = statsEquipo.estadisticas;
-      }
-    }
+    const agg = await Estadistica.aggregate([
+      { $match: match },
+      { $group: {
+        _id: null,
+        setsJugados: { $sum: '$setsJugados' },
+        tirosTotales: { $sum: '$tirosTotales' },
+        hits: { $sum: '$hits' },
+        quemados: { $sum: '$quemados' },
+        asistencias: { $sum: '$asistencias' },
+        tirosRecibidos: { $sum: '$tirosRecibidos' },
+        hitsRecibidos: { $sum: '$hitsRecibidos' },
+        esquives: { $sum: '$esquives' },
+        ponchado: { $sum: '$ponchado' },
+        catchesIntentados: { $sum: '$catchesIntentados' },
+        catches: { $sum: '$catches' },
+        bloqueosIntentados: { $sum: '$bloqueosIntentados' },
+        bloqueos: { $sum: '$bloqueos' },
+        catchesRecibidos: { $sum: '$catchesRecibidos' }
+      }}
+    ]);
+
+    const estadisticas = agg[0] ? {
+      setsJugados: agg[0].setsJugados || 0,
+      tirosTotales: agg[0].tirosTotales || 0,
+      hits: agg[0].hits || 0,
+      quemados: agg[0].quemados || 0,
+      asistencias: agg[0].asistencias || 0,
+      tirosRecibidos: agg[0].tirosRecibidos || 0,
+      hitsRecibidos: agg[0].hitsRecibidos || 0,
+      esquives: agg[0].esquives || 0,
+      ponchado: agg[0].ponchado || 0,
+      catchesIntentados: agg[0].catchesIntentados || 0,
+      catches: agg[0].catches || 0,
+      bloqueosIntentados: agg[0].bloqueosIntentados || 0,
+      bloqueos: agg[0].bloqueos || 0,
+      catchesRecibidos: agg[0].catchesRecibidos || 0
+    } : {};
+
+    const equipos = await Equipo.find({ 'jugadores.jugador': jugadorId, activo: true })
+      .select('nombre tipo pais ciudad')
+      .lean();
 
     res.json({
       success: true,
@@ -315,10 +298,9 @@ const obtenerEstadisticasJugador = async (req, res) => {
           posicion: jugador.posicion
         },
         estadisticas,
-        equipos: jugador.estadisticasPorEquipo
+        equipos: equipos.map((e) => ({ _id: e._id, nombre: e.nombre, tipo: e.tipo, pais: e.pais, ciudad: e.ciudad }))
       }
     });
-
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
     res.status(500).json({
@@ -328,32 +310,46 @@ const obtenerEstadisticasJugador = async (req, res) => {
   }
 };
 
-// Obtener ranking de jugadores
+// Obtener ranking de jugadores (agregado desde Estadistica)
 const obtenerRankingJugadores = async (req, res) => {
   try {
-    const { equipoId, temporada, limite = 10, posicion } = req.query;
+    const { equipoId, eventoId, limite = 10, posicion } = req.query;
 
-    let query = { activo: true };
-    
-    if (equipoId) {
-      query['estadisticasPorEquipo.equipo'] = equipoId;
+    const match = { activo: true };
+    if (equipoId) match.equipo = equipoId;
+    if (eventoId) match.evento = eventoId;
+
+    const topAgg = await Estadistica.aggregate([
+      { $match: match },
+      { $group: {
+        _id: '$jugador',
+        indicePoder: { $sum: '$indicePoder' },
+        hits: { $sum: '$hits' }
+      }},
+      { $sort: { indicePoder: -1 } },
+      { $limit: parseInt(limite) || 10 }
+    ]);
+
+    const jugadorIds = topAgg.map((r) => r._id).filter(Boolean);
+    if (jugadorIds.length === 0) {
+      return res.json({ success: true, data: { jugadores: [] } });
     }
 
-    if (posicion) {
-      query.posicion = posicion;
-    }
+    let jugadorQuery = { _id: { $in: jugadorIds }, activo: true };
+    if (posicion) jugadorQuery.posicion = posicion;
 
-    const jugadores = await Jugador.find(query)
+    const jugadores = await Jugador.find(jugadorQuery)
       .populate('usuario', 'nombre email')
-      .populate('estadisticasPorEquipo.equipo', 'nombre tipo')
-      .sort({ 'estadisticasGenerales.puntos': -1 })
-      .limit(parseInt(limite));
+      .lean();
+
+    const ordenMap = new Map(topAgg.map((r, i) => [r._id.toString(), i]));
+    const jugadoresOrdenados = jugadores
+      .sort((a, b) => (ordenMap.get(a._id.toString()) ?? 999) - (ordenMap.get(b._id.toString()) ?? 999) );
 
     res.json({
       success: true,
-      data: { jugadores }
+      data: { jugadores: jugadoresOrdenados }
     });
-
   } catch (error) {
     console.error('Error obteniendo ranking:', error);
     res.status(500).json({
@@ -479,8 +475,7 @@ const actualizarJugador = async (req, res) => {
       },
       { new: true, runValidators: true }
     )
-      .populate('usuario', 'nombre email')
-      .populate('estadisticasPorEquipo.equipo', 'nombre tipo');
+      .populate('usuario', 'nombre email');
 
     if (!jugador) {
       return res.status(404).json({

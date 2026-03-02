@@ -65,7 +65,7 @@ const obtenerEquipoPorNombre = async (req, res) => {
       nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
       activo: true
     })
-      .populate('jugadores.jugador', 'nombre apellido posicion estadisticasGenerales')
+      .populate('jugadores.jugador', 'nombre apellido posicion')
       .lean();
 
     if (!equipo) {
@@ -109,7 +109,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
     }).select('_id').lean();
     if (equipoDoc) {
       const topAgg = await Estadistica.aggregate([
-        { $match: { equipo: equipoDoc._id, activo: true } },
+        { $match: { equipo: equipoDoc._id, activo: true, jugador: { $ne: null } } },
         { $group: {
           _id: '$jugador',
           hits: { $sum: '$hits' },
@@ -120,23 +120,22 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
           indicePoder: { $sum: '$indicePoder' }
         }},
         { $sort: { indicePoder: -1 } },
-        { $limit: 3 },
-        { $lookup: { from: 'jugadores', localField: '_id', foreignField: '_id', as: 'j' } },
-        { $unwind: { path: '$j', preserveNullAndEmptyArrays: true } }
+        { $limit: 3 }
       ]);
-      topJugadores = topAgg.map((r) => {
-        const j = r.j || {};
-        const nombreJugador = [j.nombre, j.apellido].filter(Boolean).join(' ').trim() || 'Jugador';
-        return {
-          nombreJugador,
-          hits: Number(r.hits) || 0,
-          quemados: Number(r.quemados) || 0,
-          catches: Number(r.catches) || 0,
-          bloqueos: Number(r.bloqueos) || 0,
-          esquives: Number(r.esquives) || 0,
-          poderLiga: Number(r.indicePoder) || 0
-        };
-      });
+      const jugadorIds = topAgg.map((r) => r._id).filter(Boolean);
+      const jugadores = jugadorIds.length > 0
+        ? await Jugador.find({ _id: { $in: jugadorIds } }).select('nombre apellido').lean()
+        : [];
+      const jugadorMap = new Map(jugadores.map((j) => [j._id.toString(), [j.nombre, j.apellido].filter(Boolean).join(' ').trim() || 'Jugador']));
+      topJugadores = topAgg.map((r) => ({
+        nombreJugador: jugadorMap.get(r._id?.toString()) || 'Jugador',
+        hits: Number(r.hits) || 0,
+        quemados: Number(r.quemados) || 0,
+        catches: Number(r.catches) || 0,
+        bloqueos: Number(r.bloqueos) || 0,
+        esquives: Number(r.esquives) || 0,
+        poderLiga: Number(r.indicePoder) || 0
+      }));
     }
 
     const eventos = await Evento.find({ activo: true })
@@ -279,7 +278,7 @@ const obtenerEquipo = async (req, res) => {
     const { id } = req.params;
 
     const equipo = await Equipo.findById(id)
-      .populate('jugadores.jugador', 'nombre apellido posicion estadisticasGenerales');
+      .populate('jugadores.jugador', 'nombre apellido posicion');
 
     if (!equipo) {
       return res.status(404).json({
@@ -426,7 +425,7 @@ const obtenerJugadoresEquipo = async (req, res) => {
       .populate({
         path: 'jugadores.jugador',
         match: activo !== undefined ? { activo: activo === 'true' } : {},
-        select: 'nombre apellido posicion estadisticasGenerales'
+        select: 'nombre apellido posicion'
       });
 
     if (!equipo) {
