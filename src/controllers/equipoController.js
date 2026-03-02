@@ -113,7 +113,20 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
       partidosEmpatados: 0,
       partidosPerdidos: 0,
       golesFavor: 0,
-      golesContra: 0
+      golesContra: 0,
+      // Estadísticas detalladas (Hits, Catches, etc.) agregadas desde estadisticasLiga
+      hits: 0,
+      catches: 0,
+      esquives: 0,
+      bloqueos: 0,
+      quemados: 0,
+      asistencias: 0,
+      tirosTotales: 0,
+      tirosRecibidos: 0,
+      hitsRecibidos: 0,
+      catchesIntentos: 0,
+      catchesRecibidos: 0,
+      bloqueosIntentos: 0
     };
     let topJugadores = [];
 
@@ -169,10 +182,27 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
           break;
         }
         if (topJugadores.length === 0) topJugadores = top3;
+
+        // Agregar estadísticas detalladas del equipo (suma de todos los jugadores)
+        const jugadoresStats = ligaStats.filter((j) => norm(j.equipoNombre) === nombreNorm);
+        for (const j of jugadoresStats) {
+          statsAcum.hits += Number(j.hits) || 0;
+          statsAcum.catches += Number(j.catches) || 0;
+          statsAcum.esquives += Number(j.esquives) || 0;
+          statsAcum.bloqueos += Number(j.bloqueos) || 0;
+          statsAcum.quemados += Number(j.quemados) || 0;
+          statsAcum.asistencias += Number(j.asistencias) || 0;
+          statsAcum.tirosTotales += Number(j.tirosTotales) || 0;
+          statsAcum.tirosRecibidos += Number(j.tirosRecibidos) || 0;
+          statsAcum.hitsRecibidos += Number(j.hitsRecibidos) || 0;
+          statsAcum.catchesIntentos += Number(j.catchesIntentos) || 0;
+          statsAcum.catchesRecibidos += Number(j.catchesRecibidos) || 0;
+          statsAcum.bloqueosIntentos += Number(j.bloqueosIntentos) || 0;
+        }
       }
     }
 
-    if (topJugadores.length === 0 && eventoIdPref && mongoose.Types.ObjectId.isValid(eventoIdPref)) {
+    if (eventoIdPref && mongoose.Types.ObjectId.isValid(eventoIdPref)) {
       const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const equipoDoc = await Equipo.findOne({
         nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
@@ -186,13 +216,32 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
         })
           .populate('jugador', 'nombre apellido')
           .sort({ indicePoder: -1 })
-          .limit(3)
           .lean();
-        topJugadores = stats.map((s) => ({
-          nombreJugador: s.jugador ? ((s.jugador.nombre || '').trim() + ' ' + (s.jugador.apellido || '').trim()).trim() || 'Jugador' : 'Jugador',
-          hits: Number(s.hits) || 0,
-          poderLiga: Number(s.indicePoder) || 0
-        }));
+        if (topJugadores.length === 0) {
+          topJugadores = stats.slice(0, 3).map((s) => ({
+            nombreJugador: s.jugador ? ((s.jugador.nombre || '').trim() + ' ' + (s.jugador.apellido || '').trim()).trim() || 'Jugador' : 'Jugador',
+            hits: Number(s.hits) || 0,
+            poderLiga: Number(s.indicePoder) || 0
+          }));
+        }
+        // Agregar estadísticas detalladas desde colección Estadistica (si no hay ligaStats)
+        const tieneStatsDetalladas = statsAcum.hits > 0 || statsAcum.catches > 0 || statsAcum.tirosTotales > 0;
+        if (!tieneStatsDetalladas && stats.length > 0) {
+          for (const s of stats) {
+            statsAcum.hits += Number(s.hits) || 0;
+            statsAcum.catches += Number(s.catches) || 0;
+            statsAcum.esquives += Number(s.esquives) || 0;
+            statsAcum.bloqueos += Number(s.bloqueos) || 0;
+            statsAcum.quemados += Number(s.quemados) || 0;
+            statsAcum.asistencias += Number(s.asistencias) || 0;
+            statsAcum.tirosTotales += Number(s.tirosTotales) || 0;
+            statsAcum.tirosRecibidos += Number(s.tirosRecibidos) || 0;
+            statsAcum.hitsRecibidos += Number(s.hitsRecibidos) || 0;
+            statsAcum.catchesIntentos += Number(s.catchesIntentos || s.catchesIntentados) || 0;
+            statsAcum.catchesRecibidos += Number(s.catchesRecibidos) || 0;
+            statsAcum.bloqueosIntentos += Number(s.bloqueosIntentos || s.bloqueosIntentados) || 0;
+          }
+        }
       }
     }
 
