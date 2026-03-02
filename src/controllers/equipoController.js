@@ -106,7 +106,10 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
     const equipoDoc = await Equipo.findOne({
       nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
       activo: true
-    }).select('_id').lean();
+    })
+      .select('_id')
+      .sort({ _id: 1 })
+      .lean();
     if (equipoDoc) {
       const topAgg = await Estadistica.aggregate([
         { $match: { equipo: equipoDoc._id, activo: true, jugador: { $ne: null } } },
@@ -119,7 +122,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
           esquives: { $sum: '$esquives' },
           indicePoder: { $sum: '$indicePoder' }
         }},
-        { $sort: { indicePoder: -1 } },
+        { $sort: { indicePoder: -1, hits: -1, quemados: -1, catches: -1, _id: 1 } },
         { $limit: 3 }
       ]);
       const jugadorIds = topAgg.map((r) => r._id).filter(Boolean);
