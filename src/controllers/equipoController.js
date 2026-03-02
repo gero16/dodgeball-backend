@@ -4,7 +4,7 @@ const Jugador = require('../models/Jugador');
 // Crear nuevo equipo
 const crearEquipo = async (req, res) => {
   try {
-    const { nombre, tipo, pais, ciudad, logo, fotoPortada, fotoInfo, galeria, colorPrincipal, colorSecundario, activo } = req.body;
+    const { nombre, tipo, pais, ciudad, logo, fotoPortada, fotoPortadaPosicion, fotoInfo, fotoInfoPosicion, galeria, colorPrincipal, colorSecundario, activo } = req.body;
 
     const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const equipoExistente = await Equipo.findOne({
@@ -24,7 +24,9 @@ const crearEquipo = async (req, res) => {
       ciudad: ciudad || '',
       logo: logo || '',
       fotoPortada: fotoPortada || '',
+      fotoPortadaPosicion: fotoPortadaPosicion || 'center',
       fotoInfo: fotoInfo || '',
+      fotoInfoPosicion: fotoInfoPosicion || 'center',
       galeria: Array.isArray(galeria) ? galeria : [],
       colorPrincipal: colorPrincipal || '#000000',
       colorSecundario: colorSecundario || '#FFFFFF',
