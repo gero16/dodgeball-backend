@@ -323,7 +323,7 @@ const obtenerRankingJugadores = async (req, res) => {
       { $match: match },
       { $group: {
         _id: '$jugador',
-        indicePoder: { $sum: '$indicePoder' },
+        indicePoder: { $avg: '$indicePoder' },
         hits: { $sum: '$hits' }
       }},
       { $sort: { indicePoder: -1 } },
