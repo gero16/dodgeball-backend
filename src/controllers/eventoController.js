@@ -1594,6 +1594,30 @@ const actualizarEquiposLiga = async (req, res) => {
     evento.datosEspecificos.liga.equipos = equipos;
     await evento.save();
 
+    // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria
+    for (const eq of equipos) {
+      if (!eq?.nombre) continue;
+      try {
+        await Equipo.findOneAndUpdate(
+          { nombre: { $regex: new RegExp('^' + String(eq.nombre).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') } },
+          {
+            $set: {
+              nombre: eq.nombre,
+              logo: eq.logo || '',
+              ciudad: eq.ciudad || '',
+              fotoPortada: eq.fotoPortada || '',
+              fotoInfo: eq.fotoInfo || '',
+              galeria: Array.isArray(eq.galeria) ? eq.galeria : []
+            },
+            $setOnInsert: { tipo: 'club', activo: true }
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (err) {
+        console.warn('No se pudo sincronizar equipo a Equipo:', eq.nombre, err.message);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Equipos actualizados exitosamente',

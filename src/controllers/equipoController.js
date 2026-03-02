@@ -4,10 +4,12 @@ const Jugador = require('../models/Jugador');
 // Crear nuevo equipo
 const crearEquipo = async (req, res) => {
   try {
-    const { nombre, tipo, pais, ciudad, logo, colorPrincipal, colorSecundario, descripcion, categoria, activo } = req.body;
+    const { nombre, tipo, pais, ciudad, logo, fotoPortada, fotoInfo, galeria, colorPrincipal, colorSecundario, activo } = req.body;
 
-    // Verificar que no existe un equipo con el mismo nombre
-    const equipoExistente = await Equipo.findOne({ nombre });
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const equipoExistente = await Equipo.findOne({
+      nombre: { $regex: new RegExp('^' + escapeRegex(nombre || '') + '$', 'i') }
+    });
     if (equipoExistente) {
       return res.status(400).json({
         success: false,
@@ -16,16 +18,17 @@ const crearEquipo = async (req, res) => {
     }
 
     const equipo = new Equipo({
-      nombre,
-      tipo,
-      pais,
-      ciudad,
-      logo,
-      colorPrincipal,
-      colorSecundario,
-      descripcion,
-      categoria,
-      activo
+      nombre: (nombre || '').trim(),
+      tipo: tipo || 'club',
+      pais: pais || '',
+      ciudad: ciudad || '',
+      logo: logo || '',
+      fotoPortada: fotoPortada || '',
+      fotoInfo: fotoInfo || '',
+      galeria: Array.isArray(galeria) ? galeria : [],
+      colorPrincipal: colorPrincipal || '#000000',
+      colorSecundario: colorSecundario || '#FFFFFF',
+      activo: activo !== false
     });
 
     await equipo.save();
@@ -38,6 +41,41 @@ const crearEquipo = async (req, res) => {
 
   } catch (error) {
     console.error('Error creando equipo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Obtener equipo por nombre (para detalle en front, usa modelo global Equipo)
+const obtenerEquipoPorNombre = async (req, res) => {
+  try {
+    const nombre = decodeURIComponent(req.params.nombre || '').trim();
+    if (!nombre) {
+      return res.status(400).json({ success: false, message: 'Nombre requerido' });
+    }
+    const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const equipo = await Equipo.findOne({
+      nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
+      activo: true
+    })
+      .populate('jugadores.jugador', 'nombre apellido posicion estadisticasGenerales')
+      .lean();
+
+    if (!equipo) {
+      return res.status(404).json({
+        success: false,
+        message: 'Equipo no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { equipo }
+    });
+  } catch (error) {
+    console.error('Error obteniendo equipo por nombre:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -236,6 +274,7 @@ module.exports = {
   crearEquipo,
   obtenerEquipo,
   obtenerEquipos,
+  obtenerEquipoPorNombre,
   actualizarEquipo,
   eliminarEquipo,
   obtenerJugadoresEquipo
