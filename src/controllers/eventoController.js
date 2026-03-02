@@ -2056,6 +2056,15 @@ const actualizarEstadisticasLigaManual = async (req, res) => {
     evento.datosEspecificos.liga.estadisticasLiga = sanitized;
     await evento.save();
 
+    // Sincronizar a tabla Estadistica (incluye indicePoder/poderLiga)
+    try {
+      const syncReq = { params: { id: evento._id }, body: { jugadores: sanitized } };
+      const syncRes = { json: () => {}, status: () => ({ json: () => {} }) };
+      await upsertEstadisticasJugadores(syncReq, syncRes);
+    } catch (e) {
+      console.warn('⚠️ Sync estadisticasLiga a Estadistica:', e?.message);
+    }
+
     return res.json({ success: true, message: 'Estadísticas de liga guardadas', data: { evento } });
   } catch (error) {
     console.error('Error al guardar estadísticas de liga:', error);

@@ -120,7 +120,7 @@ const obtenerPartidosYEstadisticasEquipo = async (req, res) => {
           catches: { $sum: '$catches' },
           bloqueos: { $sum: '$bloqueos' },
           esquives: { $sum: '$esquives' },
-          indicePoder: { $sum: '$indicePoder' }
+          indicePoder: { $avg: '$indicePoder' }
         }},
         { $sort: { indicePoder: -1, hits: -1, quemados: -1, catches: -1, _id: 1 } },
         { $limit: 3 }
