@@ -1230,9 +1230,9 @@ const upsertEstadisticasJugadores = async (req, res) => {
 
     const norm = (s) => String(s || '').toLowerCase().trim();
     const splitName = (full) => {
-      const parts = String(full || '').trim().split(/\s+/);
-      if (parts.length === 0) return { nombre: '', apellido: '' };
-      if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+      const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) return { nombre: 'Sin nombre', apellido: '-' };
+      if (parts.length === 1) return { nombre: parts[0], apellido: parts[0] };
       return { nombre: parts.slice(0, -1).join(' '), apellido: parts[parts.length - 1] };
     };
     const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
@@ -1340,9 +1340,9 @@ const syncEstadisticasLigaAEstadisticaPorEvento = async (eventoId, jugadores) =>
   const equipoByName = new Map(equiposDocs.map(e => [String(e.nombre || '').toLowerCase().trim(), e]));
   const norm = (s) => String(s || '').toLowerCase().trim();
   const splitName = (full) => {
-    const parts = String(full || '').trim().split(/\s+/);
-    if (parts.length === 0) return { nombre: '', apellido: '' };
-    if (parts.length === 1) return { nombre: parts[0], apellido: '' };
+    const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { nombre: 'Sin nombre', apellido: '-' };
+    if (parts.length === 1) return { nombre: parts[0], apellido: parts[0] };
     return { nombre: parts.slice(0, -1).join(' '), apellido: parts[parts.length - 1] };
   };
   const pct = (a, b) => (b > 0 ? (a / b) * 100 : 0);
