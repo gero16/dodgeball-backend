@@ -69,7 +69,7 @@ router.put('/:id/premios', adminAuth, actualizarPremiosLiga);
 router.get('/:id/partidos/:partidoId', obtenerPartidoDetalle);
 router.post('/:id/estadisticas/preview', adminAuth, upload.single('archivo'), previsualizarHojaCalculoEstadisticas);
 router.post('/:id/estadisticas/upload', adminAuth, upload.single('archivo'), procesarHojaCalculoEstadisticas);
-router.get('/:id/jugadores', adminAuth, obtenerJugadoresEvento);
+router.get('/:id/jugadores', obtenerJugadoresEvento);
 router.put('/:id/estadisticas/liga-manual', adminAuth, actualizarEstadisticasLigaManual);
 router.put('/:id/estadisticas/jugadores', adminAuth, upsertEstadisticasJugadores);
 router.post('/:id/estadisticas/jugadores/migrar', adminAuth, migrarEstadisticasLigaAEstadistica);

@@ -2487,14 +2487,16 @@ const obtenerJugadoresEvento = async (req, res) => {
     if (!evento) {
       return res.status(404).json({ success: false, message: 'Evento no encontrado' });
     }
-    const ligaEquipos = (evento.datosEspecificos?.liga?.equipos || []);
+    const ligaEquipos = (evento.datosEspecificos?.liga?.equipos || evento.datosEspecificos?.campeonato?.equipos || evento.datosEspecificos?.torneo?.equipos || []);
     const nombresEquipos = ligaEquipos.map(e => e.nombre).filter(Boolean);
     if (!nombresEquipos.length) {
       return res.json({ success: true, data: { equipos: [] } });
     }
 
-    const equiposDocs = await Equipo.find({ nombre: { $in: nombresEquipos } })
-      .populate('jugadores.jugador', 'nombre apellido')
+    const equiposDocs = await Equipo.find({
+      $or: nombresEquipos.map(n => ({ nombre: new RegExp(`^${escapeRegExp(n)}$`, 'i') }))
+    })
+      .populate('jugadores.jugador', 'nombre apellido activo')
       .lean();
 
     const equiposMap = new Map();
@@ -2503,7 +2505,7 @@ const obtenerJugadoresEvento = async (req, res) => {
     for (const eq of equiposDocs) {
       if (eq?.nombre && eq?._id) nameToId.set(eq.nombre, eq._id);
       const list = (eq.jugadores || [])
-        .filter(j => j.jugador)
+        .filter(j => j.jugador && j.jugador.activo !== false)
         .map(j => ({
           id: j.jugador._id,
           nombre: j.jugador.nombre,
@@ -2535,96 +2537,6 @@ const obtenerJugadoresEvento = async (req, res) => {
       }
       equiposMap.set(eq.nombre, Array.from(byName.values()));
     }
-
-  // Fallback/merge adicional: buscar jugadores por nombreEquipo e ID de equipo en Jugador.estadisticasPorEquipo
-  {
-    const equipoIds = Array.from(nameToId.values()).filter(Boolean);
-    // Construir regex por nombre (insensible a mayúsculas, opcional "the " inicial y plural final)
-    const toPattern = (s) => {
-      const base = (s || '').toString().trim().replace(/^the\s+/i, '');
-      const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`^(?:the\\s+)?${escaped}s?$`, 'i');
-    };
-    const nombreRegexes = nombresEquipos.map(toPattern);
-
-    const jugadoresCoincidentes = await Jugador.find({
-      $or: [
-        { 'estadisticasPorEquipo.nombreEquipo': { $in: nombreRegexes } },
-        equipoIds.length ? { 'estadisticasPorEquipo.equipo': { $in: equipoIds } } : { _id: { $exists: true } }
-      ]
-    }).select('nombre apellido estadisticasPorEquipo').lean();
-
-    // Construir helpers de normalización y mapeos por nombre
-    const normalize = (s) => (s || '')
-      .toString()
-      .toLowerCase()
-      .replace(/^\s*the\s+/, '') // quitar artículo inicial común
-      .replace(/\s+/g, ' ')
-      .trim();
-    const stripPlural = (s) => s.endsWith('s') ? s.slice(0, -1) : s;
-
-    const eventNameByNorm = new Map();
-    for (const nombre of nombresEquipos) {
-      const n = normalize(nombre);
-      eventNameByNorm.set(n, nombre);
-      eventNameByNorm.set(stripPlural(n), nombre);
-    }
-
-    // Capturar todos los equipoIds que aparecen en estadísticas de jugadores
-    const allEquipoIdsFromStats = new Set();
-    for (const jug of jugadoresCoincidentes) {
-      for (const st of (jug.estadisticasPorEquipo || [])) {
-        if (st?.equipo) allEquipoIdsFromStats.add(st.equipo.toString());
-      }
-    }
-    // Traer nombres reales de esos equipos por ID
-    const equiposDeStats = await Equipo.find({ _id: { $in: Array.from(allEquipoIdsFromStats) } })
-      .select('_id nombre')
-      .lean();
-    const equipoIdToNombre = new Map(equiposDeStats.map(e => [e._id.toString(), e.nombre]));
-
-    for (const jug of jugadoresCoincidentes) {
-      const nombreCompleto = `${jug.nombre || ''} ${jug.apellido || ''}`.trim();
-      for (const stat of (jug.estadisticasPorEquipo || [])) {
-        const targetNames = new Set();
-        if (stat?.nombreEquipo && nombresEquipos.includes(stat.nombreEquipo)) {
-          targetNames.add(stat.nombreEquipo);
-        }
-        if (stat?.equipo) {
-          // mapear por ID → nombre
-          for (const [nombre, id] of nameToId.entries()) {
-            if (id?.toString && id.toString() === stat.equipo.toString()) {
-              targetNames.add(nombre);
-            }
-          }
-          // intentar por normalización de nombres (p. ej. singular/plural, mayúsculas)
-          const equipoNombreReal = equipoIdToNombre.get(stat.equipo.toString());
-          if (equipoNombreReal) {
-            const normReal = normalize(equipoNombreReal);
-            const direct = eventNameByNorm.get(normReal);
-            const strip = eventNameByNorm.get(stripPlural(normReal));
-            if (direct) targetNames.add(direct);
-            if (strip) targetNames.add(strip);
-          }
-        }
-        for (const nombreEquipo of targetNames) {
-          const existentes = equiposMap.get(nombreEquipo) || [];
-          const keyLc = nombreCompleto.toLowerCase();
-          if (!existentes.find(p => (p.nombreCompleto || '').toLowerCase() === keyLc)) {
-            existentes.push({
-              id: jug._id,
-              nombre: jug.nombre,
-              apellido: jug.apellido,
-              nombreCompleto,
-              numeroCamiseta: null,
-              posicion: null
-            });
-          }
-          equiposMap.set(nombreEquipo, existentes);
-        }
-      }
-    }
-  }
 
     // Merge adicional: nombres libres cargados en el evento (plantelNombres)
     for (const eq of ligaEquipos) {
