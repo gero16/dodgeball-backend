@@ -376,22 +376,41 @@ const crearPreferenciaMercadoPago = async (req, res) => {
 const webhookMercadoPago = async (req, res) => {
   try {
     // Mercado Pago puede enviar GET o POST dependiendo de la configuración
+    const topic = req.query.type || req.query.topic || req.body?.type;
     const paymentId = req.query.id || req.query['data.id'] || req.body?.data?.id;
 
-    if (!paymentId) {
-      // Aceptamos igualmente para no reintentar indefinidamente
+    // Solo procesar notificaciones de tipo "payment" (data.id = payment ID numérico)
+    // Otros tipos (merchant_order, payment_link, etc.) envían IDs distintos que no son payment IDs
+    if (topic !== 'payment') {
       return res.status(200).json({ received: true });
     }
 
-    // Obtener detalle del pago
-    const payResp = await axios.get(
+    if (!paymentId) {
+      return res.status(200).json({ received: true });
+    }
+
+    // El payment ID debe ser numérico; si es UUID (preference ID), ignorar
+    if (typeof paymentId === 'string' && paymentId.includes('-') && paymentId.length > 20) {
+      console.warn('Webhook MP: se ignoró data.id que parece preference ID, no payment ID:', paymentId);
+      return res.status(200).json({ received: true });
+    }
+
+    // Obtener detalle del pago (reintentar si 404: a veces el webhook llega antes de que el pago esté disponible)
+    let payResp;
+    const fetchPayment = () => axios.get(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`
-        }
-      }
+      { headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` } }
     );
+    try {
+      payResp = await fetchPayment();
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        await new Promise(r => setTimeout(r, 2000));
+        payResp = await fetchPayment();
+      } else {
+        throw err;
+      }
+    }
 
     const pago = payResp.data;
     const transaccionId = pago.external_reference;
