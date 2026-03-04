@@ -26,6 +26,11 @@ PAYPAL_CLIENT_ID=tu_paypal_client_id
 PAYPAL_CLIENT_SECRET=tu_paypal_client_secret
 PAYPAL_MODE=live
 
+# Mercado Pago (opcional)
+# Producción: APP_USR-...
+# Prueba: TEST-...
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxxxxxxxxxxxxxxxxxx
+
 # Uploads
 MAX_FILE_SIZE=5242880
 UPLOAD_PATH=uploads

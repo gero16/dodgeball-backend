@@ -286,12 +286,14 @@ const crearPreferenciaMercadoPago = async (req, res) => {
       proposito = 'general'
     } = req.body;
 
-    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+    const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (!mpAccessToken) {
       return res.status(500).json({
         success: false,
         message: 'Falta configurar MERCADOPAGO_ACCESS_TOKEN en el servidor'
       });
     }
+    const mpMode = mpAccessToken.startsWith('TEST-') ? 'test' : 'production';
 
     // Crear registro de donación en estado pendiente
     const donacion = new Donacion({
@@ -344,7 +346,7 @@ const crearPreferenciaMercadoPago = async (req, res) => {
       preferencePayload,
       {
         headers: {
-          Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${mpAccessToken}`,
           'Content-Type': 'application/json'
         }
       }
@@ -361,6 +363,10 @@ const crearPreferenciaMercadoPago = async (req, res) => {
       data: {
         transaccionId,
         preferenceId: preference.id,
+        mp_mode: mpMode,
+        checkout_url: mpMode === 'test'
+          ? (preference.sandbox_init_point || preference.init_point)
+          : preference.init_point,
         init_point: preference.init_point,
         sandbox_init_point: preference.sandbox_init_point || null
       }

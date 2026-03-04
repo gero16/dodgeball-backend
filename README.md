@@ -67,6 +67,11 @@ PAYPAL_CLIENT_ID=tu_paypal_client_id
 PAYPAL_CLIENT_SECRET=tu_paypal_client_secret
 PAYPAL_MODE=sandbox
 
+# Mercado Pago (para donaciones)
+# Producción suele empezar con: APP_USR-...
+# Prueba / sandbox suele empezar con: TEST-...
+MERCADOPAGO_ACCESS_TOKEN=tu_mercadopago_access_token
+
 # Uploads
 MAX_FILE_SIZE=5242880
 UPLOAD_PATH=uploads
@@ -222,6 +227,7 @@ NODE_ENV=production
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/dodgeball-club
 JWT_SECRET=secret_muy_seguro_para_produccion
 FRONTEND_URL=https://tu-frontend.com
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxxxxxxxxxxxxxxxxxx
 ```
 
 ### Comandos de Producción
