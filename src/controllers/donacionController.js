@@ -378,31 +378,71 @@ const crearPreferenciaMercadoPago = async (req, res) => {
 const webhookMercadoPago = async (req, res) => {
   try {
     console.log('[MP Webhook] Llegó notificación:', req.method, 'query:', req.query, 'body:', JSON.stringify(req.body || {}).slice(0, 200));
-    // Mercado Pago puede enviar GET o POST dependiendo de la configuración
-    const topic = req.query.type || req.query.topic || req.body?.type;
-    const paymentId = req.query.id || req.query['data.id'] || req.body?.data?.id;
+    const topic = req.query.type || req.query.topic || req.body?.topic || req.body?.type;
+    const resourceId = req.query.id || req.query['data.id'] || req.body?.data?.id;
 
-    // Solo procesar notificaciones de tipo "payment" (data.id = payment ID numérico)
-    // Otros tipos (merchant_order, payment_link, etc.) envían IDs distintos que no son payment IDs
+    if (!resourceId) {
+      return res.status(200).json({ received: true });
+    }
+
+    const authHeader = { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` };
+
+    // merchant_order: id = merchant_order_id (ej. 38707260849)
+    if (topic === 'merchant_order') {
+      const orderResp = await axios.get(
+        `https://api.mercadopago.com/merchant_orders/${resourceId}`,
+        { headers: authHeader }
+      );
+      const order = orderResp.data;
+      const transaccionId = order.external_reference;
+
+      if (!transaccionId) {
+        return res.status(200).json({ received: true });
+      }
+
+      const donacion = await Donacion.findOne({ transaccionId });
+      if (!donacion) {
+        return res.status(200).json({ received: true });
+      }
+
+      // Tomar el pago más reciente de la orden (o el aprobado)
+      const payments = order.payments || [];
+      const pago = payments.find(p => p.status === 'approved') || payments[payments.length - 1];
+
+      if (pago) {
+        donacion.mercadoPagoPaymentId = String(pago.id);
+        donacion.mercadoPagoStatus = pago.status;
+        if (pago.status === 'approved') {
+          donacion.estado = 'completada';
+          donacion.fechaPago = new Date();
+          donacion.procesado = true;
+          donacion.fechaProcesamiento = new Date();
+        } else if (pago.status === 'in_process' || pago.status === 'pending') {
+          donacion.estado = 'procesando';
+        } else if (pago.status === 'rejected' || pago.status === 'cancelled') {
+          donacion.estado = 'fallida';
+        }
+        await donacion.save();
+      }
+
+      return res.status(200).json({ success: true });
+    }
+
+    // payment: id = payment ID numérico
     if (topic !== 'payment') {
       return res.status(200).json({ received: true });
     }
 
-    if (!paymentId) {
-      return res.status(200).json({ received: true });
-    }
-
-    // El payment ID debe ser numérico; si es UUID (preference ID), ignorar
+    const paymentId = resourceId;
     if (typeof paymentId === 'string' && paymentId.includes('-') && paymentId.length > 20) {
-      console.warn('Webhook MP: se ignoró data.id que parece preference ID, no payment ID:', paymentId);
+      console.warn('Webhook MP: se ignoró data.id que parece preference ID:', paymentId);
       return res.status(200).json({ received: true });
     }
 
-    // Obtener detalle del pago (reintentar si 404: a veces el webhook llega antes de que el pago esté disponible)
     let payResp;
     const fetchPayment = () => axios.get(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${process.env.MERCADOPAGO_ACCESS_TOKEN}` } }
+      { headers: authHeader }
     );
     try {
       payResp = await fetchPayment();
@@ -446,7 +486,6 @@ const webhookMercadoPago = async (req, res) => {
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error en webhook MP:', error?.response?.data || error.message);
-    // Responder 200 para evitar reintentos excesivos, pero loguear el error
     return res.status(200).json({ success: false });
   }
 };
