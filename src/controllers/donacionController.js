@@ -312,6 +312,8 @@ const crearPreferenciaMercadoPago = async (req, res) => {
 
     const backendBaseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
     const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const notificationUrl = `${backendBaseUrl}/api/donaciones/mercadopago/webhook`;
+    console.log('[MP] notification_url enviada a Mercado Pago:', notificationUrl);
 
     const preferencePayload = {
       items: [
@@ -334,7 +336,7 @@ const crearPreferenciaMercadoPago = async (req, res) => {
         pending: `${frontendBaseUrl}/donar?mp_status=pending&ref=${encodeURIComponent(transaccionId)}`
       },
       auto_return: 'approved',
-      notification_url: `${backendBaseUrl}/api/donaciones/mercadopago/webhook`
+      notification_url: notificationUrl
     };
 
     const resp = await axios.post(
@@ -375,6 +377,7 @@ const crearPreferenciaMercadoPago = async (req, res) => {
 // Webhook de Mercado Pago
 const webhookMercadoPago = async (req, res) => {
   try {
+    console.log('[MP Webhook] Llegó notificación:', req.method, 'query:', req.query, 'body:', JSON.stringify(req.body || {}).slice(0, 200));
     // Mercado Pago puede enviar GET o POST dependiendo de la configuración
     const topic = req.query.type || req.query.topic || req.body?.type;
     const paymentId = req.query.id || req.query['data.id'] || req.body?.data?.id;
