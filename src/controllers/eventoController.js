@@ -1735,6 +1735,7 @@ const actualizarEquiposLiga = async (req, res) => {
     const key = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : 'liga';
     if (!evento.datosEspecificos[key]) evento.datosEspecificos[key] = {};
     evento.datosEspecificos[key].equipos = equipos;
+    evento.markModified('datosEspecificos');
     await evento.save();
 
     // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria
@@ -2375,6 +2376,7 @@ const actualizarEstadisticasSet = async (req, res) => {
     partidos[partidoIndex] = partido;
     datosEspecificos.liga.partidos = partidos;
     evento.datosEspecificos = datosEspecificos;
+    evento.markModified('datosEspecificos');
     await evento.save();
 
     let recalculo = null;
@@ -2778,22 +2780,31 @@ const obtenerJugadoresEvento = async (req, res) => {
       equiposMap.set(nombreClave, Array.from(byName.values()));
     }
 
-    // 3. plantelNombres: solo como fallback cuando el equipo no tiene jugadores del modelo Jugador
+    // 3. plantelNombres del evento: siempre fusionar (nombres libres / plantel editado)
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
       const actuales = equiposMap.get(eq.nombre) || [];
-      if (actuales.length > 0) continue; // ya tiene jugadores del modelo Equipo
       const nombres = (eq.plantelNombres || []).filter(Boolean);
-      if (nombres.length > 0) {
-        equiposMap.set(eq.nombre, nombres.map(n => ({
-          id: null,
-          nombre: n,
-          apellido: '',
-          nombreCompleto: n,
-          numeroCamiseta: null,
-          posicion: null
-        })));
+      if (!nombres.length && actuales.length) continue;
+      const byName = new Map(
+        actuales.map((p) => [(p.nombreCompleto || '').toLowerCase().trim(), p])
+      );
+      for (const n of nombres) {
+        const nombre = String(n).trim();
+        if (!nombre) continue;
+        const key = nombre.toLowerCase();
+        if (!byName.has(key)) {
+          byName.set(key, {
+            id: null,
+            nombre,
+            apellido: '',
+            nombreCompleto: nombre,
+            numeroCamiseta: null,
+            posicion: null
+          });
+        }
       }
+      equiposMap.set(eq.nombre, Array.from(byName.values()));
     }
 
     const eventoNombreToId = new Map();

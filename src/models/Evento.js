@@ -260,7 +260,7 @@ const eventoSchema = new mongoose.Schema({
           jugadores: [{
             nombreJugador: { type: String, trim: true },
             equipo: { type: String, enum: ['local', 'visitante'], default: 'local' },
-            jugoSet: { type: Boolean, default: true },
+            jugoSet: { type: Boolean, default: false },
             tirosTotales: { type: Number, default: 0 },
             hits: { type: Number, default: 0 },
             quemados: { type: Number, default: 0 },

@@ -253,7 +253,7 @@ function normalizeJugadorSetStats(j, equipoFallback = 'local') {
   const out = {
     nombreJugador: (j.nombreJugador || j.nombre || '').toString().trim(),
     equipo,
-    jugoSet: j.jugoSet === false || j.jugoSet === 0 || j.jugoSet === 'false' ? false : true
+    jugoSet: j.jugoSet === true || j.jugoSet === 1 || j.jugoSet === 'true'
   };
   for (const k of CAMPOS_STATS_SET) {
     out[k] = parseInt(j[k], 10) || 0;
