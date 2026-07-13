@@ -2781,18 +2781,30 @@ const obtenerJugadoresEvento = async (req, res) => {
     }
 
     // 3. plantelNombres del evento: siempre fusionar (nombres libres / plantel editado)
+    const normKey = (s) => (s || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
-      const actuales = equiposMap.get(eq.nombre) || [];
+      // localizar entrada aunque difiera mayúsculas
+      let actuales = equiposMap.get(eq.nombre);
+      if (!actuales) {
+        const foundKey = [...equiposMap.keys()].find((k) => normKey(k) === normKey(eq.nombre));
+        actuales = foundKey ? equiposMap.get(foundKey) : [];
+      }
       const nombres = (eq.plantelNombres || []).filter(Boolean);
-      if (!nombres.length && actuales.length) continue;
+      if (!nombres.length && (actuales || []).length) continue;
       const byName = new Map(
-        actuales.map((p) => [(p.nombreCompleto || '').toLowerCase().trim(), p])
+        (actuales || []).map((p) => [normKey(p.nombreCompleto), p])
       );
       for (const n of nombres) {
         const nombre = String(n).trim();
         if (!nombre) continue;
-        const key = nombre.toLowerCase();
+        const key = normKey(nombre);
         if (!byName.has(key)) {
           byName.set(key, {
             id: null,
