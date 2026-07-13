@@ -253,6 +253,30 @@ const eventoSchema = new mongoose.Schema({
           catchesRecibidos: { type: Number, default: 0 },
           tarjetasAmarillas: { type: Number, default: 0 },
           tarjetasRojas: { type: Number, default: 0 }
+        }],
+        // Detalle por set (carga set-a-set). Los totales de arriba se recalculan sumando estos sets.
+        estadisticasPorSet: [{
+          setNumber: { type: Number, required: true, min: 1 },
+          jugadores: [{
+            nombreJugador: { type: String, trim: true },
+            equipo: { type: String, enum: ['local', 'visitante'], default: 'local' },
+            jugoSet: { type: Boolean, default: true },
+            tirosTotales: { type: Number, default: 0 },
+            hits: { type: Number, default: 0 },
+            quemados: { type: Number, default: 0 },
+            asistencias: { type: Number, default: 0 },
+            tirosRecibidos: { type: Number, default: 0 },
+            hitsRecibidos: { type: Number, default: 0 },
+            dodges: { type: Number, default: 0 },
+            esquivesExitosos: { type: Number, default: 0 },
+            ponchado: { type: Number, default: 0 },
+            catchesIntentos: { type: Number, default: 0 },
+            catches: { type: Number, default: 0 },
+            bloqueosIntentos: { type: Number, default: 0 },
+            bloqueos: { type: Number, default: 0 },
+            pisoLinea: { type: Number, default: 0 },
+            catchesRecibidos: { type: Number, default: 0 }
+          }]
         }]
       }],
       reglas: [String],

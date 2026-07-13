@@ -223,6 +223,133 @@ function compararJugadores(jugador1, jugador2) {
   };
 }
 
+/** Campos numéricos por jugador en un set (sin jugoSet / setsJugados). */
+const CAMPOS_STATS_SET = [
+  'tirosTotales', 'hits', 'quemados', 'asistencias',
+  'tirosRecibidos', 'hitsRecibidos',
+  'dodges', 'esquivesExitosos', 'ponchado',
+  'catchesIntentos', 'catches',
+  'bloqueosIntentos', 'bloqueos',
+  'pisoLinea', 'catchesRecibidos'
+];
+
+const normalizePlayerKey = (nombre, equipo) => {
+  const n = (nombre || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}+/gu, '')
+    .toLowerCase()
+    .trim();
+  const side = equipo === 'visitante' ? 'visitante' : 'local';
+  return `${side}|${n}`;
+};
+
+/**
+ * Parsea una fila de stats de un set a enteros seguros.
+ */
+function normalizeJugadorSetStats(j, equipoFallback = 'local') {
+  const equipo = j.equipo === 'visitante' ? 'visitante'
+    : (j.equipo === 'local' ? 'local' : (equipoFallback === 'visitante' ? 'visitante' : 'local'));
+  const out = {
+    nombreJugador: (j.nombreJugador || j.nombre || '').toString().trim(),
+    equipo,
+    jugoSet: j.jugoSet === false || j.jugoSet === 0 || j.jugoSet === 'false' ? false : true
+  };
+  for (const k of CAMPOS_STATS_SET) {
+    out[k] = parseInt(j[k], 10) || 0;
+  }
+  return out;
+}
+
+/**
+ * Suma estadisticasPorSet → totales por jugador del partido.
+ */
+function agregarEstadisticasDesdeSets(estadisticasPorSet = []) {
+  const map = new Map();
+
+  for (const set of estadisticasPorSet || []) {
+    const jugadores = Array.isArray(set?.jugadores) ? set.jugadores : [];
+    for (const raw of jugadores) {
+      const j = normalizeJugadorSetStats(raw);
+      if (!j.nombreJugador) continue;
+      const key = normalizePlayerKey(j.nombreJugador, j.equipo);
+      if (!map.has(key)) {
+        const base = {
+          nombreJugador: j.nombreJugador,
+          equipo: j.equipo,
+          setsJugados: 0,
+          tarjetasAmarillas: 0,
+          tarjetasRojas: 0
+        };
+        for (const k of CAMPOS_STATS_SET) base[k] = 0;
+        map.set(key, base);
+      }
+      const acc = map.get(key);
+      if (j.jugoSet) acc.setsJugados += 1;
+      for (const k of CAMPOS_STATS_SET) {
+        acc[k] += j[k] || 0;
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+/**
+ * Suma totales de jugadores del partido → totales por equipo (local/visitante).
+ */
+function agregarTotalesEquipoDesdeJugadores(estadisticasJugadores = []) {
+  const init = () => ({
+    tirosTotales: 0,
+    hits: 0,
+    quemados: 0,
+    asistencias: 0,
+    tirosRecibidos: 0,
+    hitsRecibidos: 0,
+    esquives: 0,
+    dodges: 0,
+    esquivesExitosos: 0,
+    ponchado: 0,
+    catchesIntentos: 0,
+    catches: 0,
+    bloqueosIntentos: 0,
+    bloqueos: 0,
+    pisoLinea: 0,
+    catchesRecibidos: 0,
+    setsJugados: 0,
+    tarjetasAmarillas: 0,
+    tarjetasRojas: 0
+  });
+  const sum = { local: init(), visitante: init() };
+
+  for (const j of estadisticasJugadores || []) {
+    const side = j.equipo === 'visitante' ? 'visitante' : 'local';
+    const t = sum[side];
+    t.tirosTotales += parseInt(j.tirosTotales, 10) || 0;
+    t.hits += parseInt(j.hits, 10) || 0;
+    t.quemados += parseInt(j.quemados, 10) || 0;
+    t.asistencias += parseInt(j.asistencias, 10) || 0;
+    t.tirosRecibidos += parseInt(j.tirosRecibidos, 10) || 0;
+    t.hitsRecibidos += parseInt(j.hitsRecibidos, 10) || 0;
+    const dodges = parseInt(j.dodges, 10) || 0;
+    t.esquives += dodges;
+    t.dodges += dodges;
+    t.esquivesExitosos += parseInt(j.esquivesExitosos, 10) || 0;
+    t.ponchado += parseInt(j.ponchado, 10) || 0;
+    t.catchesIntentos += parseInt(j.catchesIntentos, 10) || 0;
+    t.catches += parseInt(j.catches, 10) || 0;
+    t.bloqueosIntentos += parseInt(j.bloqueosIntentos, 10) || 0;
+    t.bloqueos += parseInt(j.bloqueos, 10) || 0;
+    t.pisoLinea += parseInt(j.pisoLinea, 10) || 0;
+    t.catchesRecibidos += parseInt(j.catchesRecibidos, 10) || 0;
+    t.setsJugados += parseInt(j.setsJugados, 10) || 0;
+    t.tarjetasAmarillas += parseInt(j.tarjetasAmarillas, 10) || 0;
+    t.tarjetasRojas += parseInt(j.tarjetasRojas, 10) || 0;
+  }
+
+  return sum;
+}
+
 module.exports = {
   calcularIndiceAtaque,
   calcularIndiceDefensa,
@@ -231,5 +358,9 @@ module.exports = {
   calcularEstadisticasCompletas,
   agregarEstadisticasPartido,
   generarReporteJugador,
-  compararJugadores
+  compararJugadores,
+  CAMPOS_STATS_SET,
+  normalizeJugadorSetStats,
+  agregarEstadisticasDesdeSets,
+  agregarTotalesEquipoDesdeJugadores
 };

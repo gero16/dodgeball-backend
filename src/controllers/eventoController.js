@@ -7,7 +7,12 @@ const Equipo = require('../models/Equipo');
 const Usuario = require('../models/Usuario');
 const fs = require('fs');
 const path = require('path');
-const { calcularEstadisticasCompletas } = require('../utils/estadisticas');
+const {
+  calcularEstadisticasCompletas,
+  normalizeJugadorSetStats,
+  agregarEstadisticasDesdeSets,
+  agregarTotalesEquipoDesdeJugadores
+} = require('../utils/estadisticas');
 
 // Utilidad: construir resumen por categoría/equipo/jugador a partir de filas crudas
 function buildSummaryFromRows(rows) {
@@ -2253,6 +2258,151 @@ const obtenerPartidoDetalle = async (req, res) => {
   }
 };
 
+/**
+ * Upsert de estadísticas de un set. Flujo canónico set-a-set.
+ * Body: { jugadores: [...] } — puede traer un solo lado; se mergea con el otro.
+ * Recalcula estadisticasJugadores + estadisticas del partido sumando todos los sets.
+ * Nota: el PUT admin de totales (pegado rápido) no toca estadisticasPorSet.
+ */
+const actualizarEstadisticasSet = async (req, res) => {
+  try {
+    const { id, partidoId, setNumber } = req.params;
+    const setNum = parseInt(setNumber, 10);
+    if (!Number.isFinite(setNum) || setNum < 1) {
+      return res.status(400).json({ success: false, message: 'setNumber inválido' });
+    }
+
+    const jugadoresInput = Array.isArray(req.body?.jugadores) ? req.body.jugadores : null;
+    if (!jugadoresInput) {
+      return res.status(400).json({ success: false, message: 'Se requiere el array jugadores' });
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+
+    const datosEspecificos = JSON.parse(JSON.stringify(evento.datosEspecificos || {}));
+    if (!datosEspecificos.liga) datosEspecificos.liga = {};
+    const partidos = Array.isArray(datosEspecificos.liga.partidos) ? datosEspecificos.liga.partidos : [];
+    const partidoIndex = partidos.findIndex(p => p._id?.toString() === partidoId);
+    if (partidoIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Partido no encontrado' });
+    }
+
+    const partido = partidos[partidoIndex];
+    const norm = (s) => (s || '').toString().normalize('NFD').replace(/\p{Diacritic}+/gu, '').toLowerCase().trim();
+    const localN = norm(partido.equipoLocal || '');
+    const visN = norm(partido.equipoVisitante || '');
+
+    const mapEquipo = (j) => {
+      const equipoInput = (j.equipo || j.equipoNombre || '').toString();
+      const eqN = norm(equipoInput);
+      if (j.equipo === 'visitante' || eqN === visN) return 'visitante';
+      if (j.equipo === 'local' || eqN === localN) return 'local';
+      return 'local';
+    };
+
+    const nuevos = jugadoresInput
+      .map((j) => normalizeJugadorSetStats({ ...j, equipo: mapEquipo(j) }))
+      .filter((j) => j.nombreJugador);
+
+    if (!Array.isArray(partido.estadisticasPorSet)) partido.estadisticasPorSet = [];
+
+    const sidesInRequest = new Set(nuevos.map((j) => j.equipo));
+    let setIdx = partido.estadisticasPorSet.findIndex((s) => Number(s.setNumber) === setNum);
+
+    if (setIdx === -1) {
+      partido.estadisticasPorSet.push({ setNumber: setNum, jugadores: nuevos });
+      setIdx = partido.estadisticasPorSet.length - 1;
+    } else {
+      const prev = Array.isArray(partido.estadisticasPorSet[setIdx].jugadores)
+        ? partido.estadisticasPorSet[setIdx].jugadores
+        : [];
+      const kept = prev.filter((j) => !sidesInRequest.has(j.equipo === 'visitante' ? 'visitante' : 'local'));
+      partido.estadisticasPorSet[setIdx] = {
+        setNumber: setNum,
+        jugadores: [...kept, ...nuevos]
+      };
+    }
+
+    partido.estadisticasPorSet.sort((a, b) => Number(a.setNumber) - Number(b.setNumber));
+
+    // Totales de partido desde todos los sets
+    partido.estadisticasJugadores = agregarEstadisticasDesdeSets(partido.estadisticasPorSet);
+    partido.estadisticas = agregarTotalesEquipoDesdeJugadores(partido.estadisticasJugadores);
+
+    // Sincronizar plantelNombres
+    try {
+      const equiposLiga = Array.isArray(datosEspecificos.liga.equipos) ? datosEspecificos.liga.equipos : [];
+      const normalizar = (s) => (s || '').toString().trim();
+      const toLower = (s) => normalizar(s).toLowerCase();
+      const jugadoresLocales = (partido.estadisticasJugadores || [])
+        .filter((j) => j.equipo === 'local')
+        .map((j) => normalizar(j.nombreJugador))
+        .filter(Boolean);
+      const jugadoresVisitantes = (partido.estadisticasJugadores || [])
+        .filter((j) => j.equipo === 'visitante')
+        .map((j) => normalizar(j.nombreJugador))
+        .filter(Boolean);
+      const mergeNombres = (existentes = [], nuevosNombres = []) => {
+        const setLc = new Set(existentes.map((n) => toLower(n)));
+        const out = [...existentes];
+        for (const n of nuevosNombres) {
+          const key = toLower(n);
+          if (!setLc.has(key)) {
+            setLc.add(key);
+            out.push(n);
+          }
+        }
+        return out;
+      };
+      for (let i = 0; i < equiposLiga.length; i++) {
+        const eq = equiposLiga[i] || {};
+        if (!eq?.nombre) continue;
+        if (eq.nombre === partido.equipoLocal) {
+          eq.plantelNombres = mergeNombres(eq.plantelNombres || [], jugadoresLocales);
+        } else if (eq.nombre === partido.equipoVisitante) {
+          eq.plantelNombres = mergeNombres(eq.plantelNombres || [], jugadoresVisitantes);
+        }
+        equiposLiga[i] = eq;
+      }
+      datosEspecificos.liga.equipos = equiposLiga;
+    } catch (e) {
+      console.warn('⚠️ No se pudo sincronizar plantelNombres desde set:', e?.message);
+    }
+
+    partidos[partidoIndex] = partido;
+    datosEspecificos.liga.partidos = partidos;
+    evento.datosEspecificos = datosEspecificos;
+    await evento.save();
+
+    let recalculo = null;
+    try {
+      recalculo = await recalcularEstadisticasLigaDesdePartidos(evento._id);
+    } catch (e) {
+      console.error('⚠️ Error recalculando estadísticas de liga tras set:', e);
+    }
+
+    res.json({
+      success: true,
+      message: `Estadísticas del set ${setNum} actualizadas`,
+      data: {
+        partido: partidos[partidoIndex],
+        setNumber: setNum,
+        recalculo
+      }
+    });
+  } catch (error) {
+    console.error('Error al actualizar estadísticas del set:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor',
+      error: error.message
+    });
+  }
+};
+
 // Función auxiliar para recalcular tabla de posiciones
 const recalcularTablaPosiciones = async (evento, partidos) => {
   console.log('🔄 Recalculando tabla de posiciones...');
@@ -2678,6 +2828,7 @@ module.exports = {
   actualizarFixtureLiga,
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
+  actualizarEstadisticasSet,
   recalcularEstadisticasLiga,
   actualizarPremiosLiga,
   obtenerPartidoDetalle,

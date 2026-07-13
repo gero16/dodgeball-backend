@@ -19,6 +19,7 @@ const {
   actualizarFixtureLiga,
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
+  actualizarEstadisticasSet,
   actualizarPremiosLiga,
   obtenerPartidoDetalle,
   obtenerEstadisticasEvento,
@@ -32,7 +33,7 @@ const {
   recalcularEstadisticasLiga
 } = require('../controllers/eventoController');
 
-const { adminAuth } = require('../middleware/auth');
+const { adminAuth, auth } = require('../middleware/auth');
 const { validateEvento } = require('../middleware/validation');
 const { upload } = require('../middleware/upload');
 
@@ -64,6 +65,8 @@ router.post('/:id/inscribir', adminAuth, inscribirUsuario);
 router.put('/:id/equipos', adminAuth, actualizarEquiposLiga);
 router.put('/:id/fixture', adminAuth, actualizarFixtureLiga);
 router.put('/:id/partidos/:partidoId/resultado', adminAuth, actualizarResultadoPartido);
+// Carga set-a-set: cualquier usuario autenticado (ruta más específica primero)
+router.put('/:id/partidos/:partidoId/estadisticas/sets/:setNumber', auth, actualizarEstadisticasSet);
 router.put('/:id/partidos/:partidoId/estadisticas', adminAuth, actualizarEstadisticasPartido);
 router.put('/:id/premios', adminAuth, actualizarPremiosLiga);
 router.get('/:id/partidos/:partidoId', obtenerPartidoDetalle);
