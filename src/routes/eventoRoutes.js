@@ -16,6 +16,7 @@ const {
   obtenerEstadisticasParticipacion,
   // Nuevas rutas para edición de ligas
   actualizarEquiposLiga,
+  agregarJugadorPlantel,
   actualizarFixtureLiga,
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
@@ -63,6 +64,8 @@ router.post('/:id/inscribir', adminAuth, inscribirUsuario);
 
 // Nuevas rutas para edición de ligas (admin)
 router.put('/:id/equipos', adminAuth, actualizarEquiposLiga);
+// Agregar jugador al plantel: usuarios autenticados (carga de stats)
+router.post('/:id/equipos/plantel', auth, agregarJugadorPlantel);
 router.put('/:id/fixture', adminAuth, actualizarFixtureLiga);
 router.put('/:id/partidos/:partidoId/resultado', adminAuth, actualizarResultadoPartido);
 // Carga set-a-set: cualquier usuario autenticado (ruta más específica primero)

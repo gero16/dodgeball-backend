@@ -1734,12 +1734,33 @@ const actualizarEquiposLiga = async (req, res) => {
     const ds = evento.datosEspecificos;
     const key = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : 'liga';
     if (!evento.datosEspecificos[key]) evento.datosEspecificos[key] = {};
-    evento.datosEspecificos[key].equipos = equipos;
+
+    // Normalizar equipos para no perder plantelnombres al castear
+    const incoming = Array.isArray(equipos) ? equipos : [];
+    evento.datosEspecificos[key].equipos = incoming.map((eq) => ({
+      nombre: eq?.nombre || '',
+      logo: eq?.logo || '',
+      ciudad: eq?.ciudad || '',
+      fotoPortada: eq?.fotoPortada || '',
+      fotoInfo: eq?.fotoInfo || '',
+      galeria: Array.isArray(eq?.galeria) ? eq.galeria : [],
+      plantelNombres: Array.isArray(eq?.plantelNombres)
+        ? eq.plantelNombres.map((n) => String(n || '').trim()).filter(Boolean)
+        : [],
+      puntos: eq?.puntos || 0,
+      partidosJugados: eq?.partidosJugados || 0,
+      partidosGanados: eq?.partidosGanados || 0,
+      partidosEmpatados: eq?.partidosEmpatados || 0,
+      partidosPerdidos: eq?.partidosPerdidos || 0,
+      golesFavor: eq?.golesFavor || 0,
+      golesContra: eq?.golesContra || 0,
+      diferenciaGoles: eq?.diferenciaGoles || 0
+    }));
     evento.markModified('datosEspecificos');
     await evento.save();
 
     // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria
-    for (const eq of equipos) {
+    for (const eq of incoming) {
       if (!eq?.nombre) continue;
       try {
         await Equipo.findOneAndUpdate(
@@ -1777,6 +1798,67 @@ const actualizarEquiposLiga = async (req, res) => {
       success: false,
       message: 'Error interno del servidor'
     });
+  }
+};
+
+/** Agregar un nombre al plantel de un equipo del evento (usuarios autenticados). */
+const agregarJugadorPlantel = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const equipoNombre = (req.body?.equipoNombre || '').toString().trim();
+    const nombre = (req.body?.nombre || '').toString().trim();
+    if (!equipoNombre || !nombre) {
+      return res.status(400).json({
+        success: false,
+        message: 'equipoNombre y nombre son requeridos'
+      });
+    }
+
+    const evento = await Evento.findById(id);
+    if (!evento) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+    if (!evento.datosEspecificos) evento.datosEspecificos = {};
+    const ds = evento.datosEspecificos;
+    const key = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : null;
+    if (!key || !Array.isArray(ds[key]?.equipos)) {
+      return res.status(400).json({ success: false, message: 'El evento no tiene equipos' });
+    }
+
+    const norm = (s) => (s || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const equipos = ds[key].equipos;
+    const idx = equipos.findIndex((eq) => norm(eq?.nombre) === norm(equipoNombre));
+    if (idx < 0) {
+      return res.status(404).json({ success: false, message: 'Equipo no encontrado en el evento' });
+    }
+
+    const actuales = Array.isArray(equipos[idx].plantelNombres) ? [...equipos[idx].plantelNombres] : [];
+    const exists = actuales.some((n) => norm(n) === norm(nombre));
+    if (!exists) actuales.push(nombre);
+    equipos[idx].plantelNombres = actuales;
+    ds[key].equipos = equipos;
+    evento.markModified('datosEspecificos');
+    await evento.save();
+
+    return res.json({
+      success: true,
+      message: exists ? 'El jugador ya estaba en el plantel' : 'Jugador agregado al plantel',
+      data: {
+        equipoNombre: equipos[idx].nombre,
+        plantelNombres: actuales,
+        evento
+      }
+    });
+  } catch (error) {
+    console.error('Error al agregar jugador al plantel:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor' });
   }
 };
 
@@ -2848,6 +2930,7 @@ module.exports = {
   obtenerTablaCampeonato,
   obtenerEstadisticasParticipacion,
   actualizarEquiposLiga,
+  agregarJugadorPlantel,
   actualizarFixtureLiga,
   actualizarResultadoPartido,
   actualizarEstadisticasPartido,
