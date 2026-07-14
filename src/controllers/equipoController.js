@@ -353,11 +353,32 @@ const obtenerEquipos = async (req, res) => {
   }
 };
 
-// Actualizar equipo
+// Actualizar equipo (fuente de verdad del club, incluido plantel)
 const actualizarEquipo = async (req, res) => {
   try {
     const { id } = req.params;
-    const datosActualizacion = req.body;
+    const datosActualizacion = { ...(req.body || {}) };
+
+    const norm = (s) => (s || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (Array.isArray(datosActualizacion.plantelNombres)) {
+      const seen = new Set();
+      datosActualizacion.plantelNombres = datosActualizacion.plantelNombres
+        .map((n) => String(n || '').trim())
+        .filter((n) => {
+          if (!n) return false;
+          const k = norm(n);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+    }
 
     const equipo = await Equipo.findByIdAndUpdate(
       id,
@@ -370,6 +391,34 @@ const actualizarEquipo = async (req, res) => {
         success: false,
         message: 'Equipo no encontrado'
       });
+    }
+
+    // Si se actualizó el plantel del club, replicarlo a todos los eventos donde participa
+    if (Array.isArray(datosActualizacion.plantelNombres)) {
+      try {
+        const eventos = await Evento.find({}).select('datosEspecificos');
+        const plantel = datosActualizacion.plantelNombres;
+        const clubKey = norm(equipo.nombre);
+        for (const ev of eventos) {
+          if (!ev.datosEspecificos) continue;
+          const ds = ev.datosEspecificos;
+          const tipo = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : null;
+          if (!tipo || !Array.isArray(ds[tipo]?.equipos)) continue;
+          let changed = false;
+          ds[tipo].equipos = ds[tipo].equipos.map((eq) => {
+            if (norm(eq?.nombre) !== clubKey) return eq;
+            changed = true;
+            const base = (eq && typeof eq.toObject === 'function') ? eq.toObject() : { ...eq };
+            return { ...base, plantelNombres: [...plantel] };
+          });
+          if (changed) {
+            ev.markModified('datosEspecificos');
+            await ev.save();
+          }
+        }
+      } catch (propErr) {
+        console.warn('No se pudo propagar plantel a eventos:', propErr?.message);
+      }
     }
 
     res.json({
