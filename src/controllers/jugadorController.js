@@ -363,6 +363,8 @@ const obtenerRankingJugadores = async (req, res) => {
 const obtenerEquiposJugador = async (req, res) => {
   try {
     const { id } = req.params;
+    const { historial } = req.query;
+    const { isMembershipActive } = require('../utils/plantelSync');
 
     const equipos = await Equipo.find({
       'jugadores.jugador': id,
@@ -371,19 +373,26 @@ const obtenerEquiposJugador = async (req, res) => {
       .select('nombre tipo ciudad logo jugadores')
       .lean();
 
-    const equiposConDetalle = equipos.map((eq) => {
-      const entrada = (eq.jugadores || []).find((j) => j.jugador?.toString() === id);
-      return {
-        _id: eq._id,
-        nombre: eq.nombre,
-        tipo: eq.tipo,
-        ciudad: eq.ciudad,
-        logo: eq.logo,
-        numeroCamiseta: entrada?.numeroCamiseta,
-        posicion: entrada?.posicion,
-        activo: entrada?.activo !== false
-      };
-    });
+    const equiposConDetalle = [];
+    for (const eq of equipos) {
+      const entradas = (eq.jugadores || []).filter((j) => j.jugador?.toString() === id);
+      for (const entrada of entradas) {
+        const activa = isMembershipActive(entrada);
+        if (!historial && !activa) continue;
+        equiposConDetalle.push({
+          _id: eq._id,
+          nombre: eq.nombre,
+          tipo: eq.tipo,
+          ciudad: eq.ciudad,
+          logo: eq.logo,
+          numeroCamiseta: entrada?.numeroCamiseta,
+          posicion: entrada?.posicion,
+          activo: activa,
+          fechaIngreso: entrada?.fechaIngreso || null,
+          fechaHasta: entrada?.fechaHasta || null
+        });
+      }
+    }
 
     res.json({
       success: true,
@@ -438,16 +447,25 @@ const agregarJugadorAEquipo = async (req, res) => {
       numeroCamiseta: numeroCamiseta || null,
       posicion: posicion || jugador.posicion,
       fechaIngreso: new Date(),
+      fechaHasta: null,
       activo: true
     });
 
     // Espejo aditivo en plantelNombres (compat UI / eventos)
-    const { mirrorJugadorNameIntoPlantel, uniquePlantelNames } = require('../utils/plantelSync');
+    const {
+      mirrorJugadorNameIntoPlantel,
+      uniquePlantelNames,
+      propagatePlantelNombresToEventos
+    } = require('../utils/plantelSync');
     await mirrorJugadorNameIntoPlantel(equipo, jugador);
     await equipo.save();
 
     // Propagar nombre a planteles de eventos (unión, no replace)
     try {
+      await propagatePlantelNombresToEventos(equipo);
+    } catch (propErr) {
+      console.warn('No se pudo propagar jugador a eventos:', propErr?.message);
+      try {
       const Evento = require('../models/Evento');
       const name = `${jugador.nombre || ''} ${jugador.apellido || ''}`.trim();
       const clubKey = (equipo.nombre || '')
@@ -488,8 +506,7 @@ const agregarJugadorAEquipo = async (req, res) => {
           await ev.save();
         }
       }
-    } catch (propErr) {
-      console.warn('No se pudo propagar jugador a eventos:', propErr?.message);
+      } catch (_) { /* ignore */ }
     }
 
     res.json({
@@ -593,17 +610,35 @@ const removerJugadorDeEquipo = async (req, res) => {
     }
 
     const jugador = await Jugador.findById(jugadorId);
-    // Remover jugador del equipo
-    equipo.jugadores = equipo.jugadores.filter(
-      j => j.jugador.toString() !== jugadorId
-    );
+    const { removeJugadorNameFromPlantel, isMembershipActive, propagatePlantelNombresToEventos } = require('../utils/plantelSync');
 
-    if (jugador) {
-      const { removeJugadorNameFromPlantel } = require('../utils/plantelSync');
-      await removeJugadorNameFromPlantel(equipo, jugador);
+    // Baja con fecha (historial), no borrado duro
+    const now = new Date();
+    let found = false;
+    for (const row of equipo.jugadores || []) {
+      if (row.jugador.toString() !== jugadorId) continue;
+      if (!isMembershipActive(row, now)) continue;
+      row.activo = false;
+      row.fechaHasta = now;
+      found = true;
+    }
+    if (!found) {
+      // Compat: si no hay fila activa, quitar restos
+      equipo.jugadores = (equipo.jugadores || []).filter(
+        (j) => j.jugador.toString() !== jugadorId
+      );
     }
 
+    if (jugador) {
+      await removeJugadorNameFromPlantel(equipo, jugador);
+    }
+    equipo.markModified('jugadores');
     await equipo.save();
+    try {
+      await propagatePlantelNombresToEventos(equipo);
+    } catch (e) {
+      console.warn('No se pudo propagar plantel tras baja:', e?.message);
+    }
 
     res.json({
       success: true,
@@ -613,6 +648,102 @@ const removerJugadorDeEquipo = async (req, res) => {
 
   } catch (error) {
     console.error('Error removiendo jugador del equipo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+/** POST transferir con fecha (cierra origen, abre destino, historial). */
+const transferirJugadorController = async (req, res) => {
+  try {
+    const { jugadorId } = req.params;
+    const {
+      haciaEquipoId,
+      desdeEquipoId,
+      fecha,
+      motivo,
+      numeroCamiseta,
+      posicion
+    } = req.body || {};
+
+    if (!haciaEquipoId) {
+      return res.status(400).json({
+        success: false,
+        message: 'haciaEquipoId es requerido'
+      });
+    }
+
+    const { transferirJugador } = require('../utils/plantelSync');
+    const result = await transferirJugador({
+      jugadorId,
+      haciaEquipoId,
+      desdeEquipoId: desdeEquipoId || null,
+      fecha: fecha || new Date(),
+      motivo: motivo || '',
+      creadoPor: req.usuario?._id || null,
+      numeroCamiseta: numeroCamiseta ?? null,
+      posicion: posicion || null
+    });
+
+    res.json({
+      success: true,
+      message: 'Transferencia registrada',
+      data: result
+    });
+  } catch (error) {
+    console.error('Error en transferencia:', error);
+    const status = error.statusCode || 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Error interno del servidor'
+    });
+  }
+};
+
+const listarTransferenciasJugador = async (req, res) => {
+  try {
+    const { jugadorId } = req.params;
+    const Transferencia = require('../models/Transferencia');
+    const rows = await Transferencia.find({ jugador: jugadorId })
+      .sort({ fecha: -1 })
+      .populate('desdeEquipo', 'nombre')
+      .populate('haciaEquipo', 'nombre')
+      .populate('jugador', 'nombre apellido')
+      .lean();
+
+    res.json({
+      success: true,
+      data: { transferencias: rows }
+    });
+  } catch (error) {
+    console.error('Error listando transferencias:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+const listarTransferencias = async (req, res) => {
+  try {
+    const Transferencia = require('../models/Transferencia');
+    const limite = Math.min(parseInt(req.query.limite, 10) || 50, 200);
+    const rows = await Transferencia.find({})
+      .sort({ fecha: -1 })
+      .limit(limite)
+      .populate('desdeEquipo', 'nombre')
+      .populate('haciaEquipo', 'nombre')
+      .populate('jugador', 'nombre apellido')
+      .lean();
+
+    res.json({
+      success: true,
+      data: { transferencias: rows }
+    });
+  } catch (error) {
+    console.error('Error listando transferencias:', error);
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
@@ -631,5 +762,8 @@ module.exports = {
   obtenerEstadisticasJugador,
   obtenerRankingJugadores,
   agregarJugadorAEquipo,
-  removerJugadorDeEquipo
+  removerJugadorDeEquipo,
+  transferirJugadorController,
+  listarTransferenciasJugador,
+  listarTransferencias
 };

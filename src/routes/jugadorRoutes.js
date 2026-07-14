@@ -12,13 +12,18 @@ const {
   obtenerEstadisticasJugador,
   obtenerRankingJugadores,
   agregarJugadorAEquipo,
-  removerJugadorDeEquipo
+  removerJugadorDeEquipo,
+  transferirJugadorController,
+  listarTransferenciasJugador,
+  listarTransferencias
 } = require('../controllers/jugadorController');
 
 // Rutas públicas (lectura)
 router.get('/', obtenerJugadores);
 router.get('/ranking/lista', obtenerRankingJugadores);
+router.get('/transferencias', listarTransferencias);
 router.get('/:id/equipos', obtenerEquiposJugador);
+router.get('/:jugadorId/transferencias', listarTransferenciasJugador);
 router.get('/:id', obtenerJugador);
 router.get('/:jugadorId/estadisticas', obtenerEstadisticasJugador);
 
@@ -29,5 +34,6 @@ router.delete('/:id', adminAuth, eliminarJugador);
 router.put('/:jugadorId/partido/:partidoId/equipo/:equipoId/estadisticas', adminAuth, actualizarEstadisticasJugador);
 router.post('/:jugadorId/equipos/:equipoId', adminAuth, agregarJugadorAEquipo);
 router.delete('/:jugadorId/equipos/:equipoId', adminAuth, removerJugadorDeEquipo);
+router.post('/:jugadorId/transferencias', adminAuth, transferirJugadorController);
 
 module.exports = router;

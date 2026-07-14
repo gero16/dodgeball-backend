@@ -80,6 +80,11 @@ const equipoSchema = new mongoose.Schema({
       type: Date,
       default: Date.now
     },
+    /** Fin de membresía (null = vigente). Se setea en transferencias / bajas. */
+    fechaHasta: {
+      type: Date,
+      default: null
+    },
     activo: {
       type: Boolean,
       default: true
