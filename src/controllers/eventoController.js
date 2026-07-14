@@ -1834,7 +1834,14 @@ const agregarJugadorPlantel = async (req, res) => {
       .trim();
 
     const equipos = ds[key].equipos;
-    const idx = equipos.findIndex((eq) => norm(eq?.nombre) === norm(equipoNombre));
+    let idx = equipos.findIndex((eq) => norm(eq?.nombre) === norm(equipoNombre));
+    if (idx < 0) {
+      const k = norm(equipoNombre);
+      idx = equipos.findIndex((eq) => {
+        const n = norm(eq?.nombre);
+        return n && k && (n.includes(k) || k.includes(n));
+      });
+    }
     if (idx < 0) {
       return res.status(404).json({ success: false, message: 'Equipo no encontrado en el evento' });
     }
