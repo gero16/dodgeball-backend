@@ -36,11 +36,20 @@ const jugadorSchema = new mongoose.Schema({
     default: true
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
-// Índices
+jugadorSchema.virtual('nombreCompleto').get(function nombreCompleto() {
+  const n = (this.nombre || '').toString().trim();
+  const a = (this.apellido || '').toString().trim();
+  if (!a || a.toLowerCase() === 'sinapellido') return n;
+  return `${n} ${a}`.trim();
+});
+
 jugadorSchema.index({ usuario: 1 });
 jugadorSchema.index({ activo: 1 });
+jugadorSchema.index({ nombre: 1, apellido: 1 });
 
 module.exports = mongoose.model('Jugador', jugadorSchema);

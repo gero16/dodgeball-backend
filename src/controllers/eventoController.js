@@ -36,24 +36,19 @@ const uniquePlantelNames = (names) => {
   return out;
 };
 
-/** Fusiona nombres al plantel del club (Equipo) para que existan en todos los eventos. */
+/** Fusiona nombres al plantel del club + vincula documentos Jugador. */
 const syncPlantelAlClub = async (equipoNombre, nombres) => {
   const nombre = String(equipoNombre || '').trim();
   const lista = uniquePlantelNames(nombres);
   if (!nombre || !lista.length) return;
   try {
+    const { syncEquipoJugadoresFromNombres } = require('../utils/plantelSync');
     const escaped = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const eq = await Equipo.findOne({
       nombre: { $regex: new RegExp(`^${escaped}$`, 'i') }
     });
     if (!eq) return;
-    const merged = uniquePlantelNames([
-      ...(Array.isArray(eq.plantelNombres) ? eq.plantelNombres : []),
-      ...lista
-    ]);
-    eq.plantelNombres = merged;
-    eq.markModified('plantelNombres');
-    await eq.save();
+    await syncEquipoJugadoresFromNombres(eq, lista, { replace: false });
   } catch (err) {
     console.warn('No se pudo sincronizar plantel al club:', nombre, err?.message);
   }

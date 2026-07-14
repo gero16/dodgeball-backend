@@ -53,13 +53,13 @@ const equipoSchema = new mongoose.Schema({
     default: '#FFFFFF'
   },
 
-  /** Nombres libres del plantel del club (compartido entre eventos). */
+  /** Nombres libres del plantel (espejo legible; la fuente por ID es `jugadores`). */
   plantelNombres: {
     type: [String],
     default: []
   },
   
-  // Jugadores del equipo
+  // Jugadores del equipo (refs al modelo Jugador — fuente de verdad del plantel)
   jugadores: [{
     jugador: {
       type: mongoose.Schema.Types.ObjectId,

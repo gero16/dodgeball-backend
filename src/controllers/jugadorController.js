@@ -441,7 +441,56 @@ const agregarJugadorAEquipo = async (req, res) => {
       activo: true
     });
 
+    // Espejo aditivo en plantelNombres (compat UI / eventos)
+    const { mirrorJugadorNameIntoPlantel, uniquePlantelNames } = require('../utils/plantelSync');
+    await mirrorJugadorNameIntoPlantel(equipo, jugador);
     await equipo.save();
+
+    // Propagar nombre a planteles de eventos (unión, no replace)
+    try {
+      const Evento = require('../models/Evento');
+      const name = `${jugador.nombre || ''} ${jugador.apellido || ''}`.trim();
+      const clubKey = (equipo.nombre || '')
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+      const eventos = await Evento.find({}).select('datosEspecificos');
+      for (const ev of eventos) {
+        if (!ev.datosEspecificos) continue;
+        const ds = ev.datosEspecificos;
+        const tipo = ds.liga ? 'liga' : ds.campeonato ? 'campeonato' : ds.torneo ? 'torneo' : null;
+        if (!tipo || !Array.isArray(ds[tipo]?.equipos)) continue;
+        let changed = false;
+        ds[tipo].equipos = ds[tipo].equipos.map((eq) => {
+          const n = (eq?.nombre || '')
+            .toString()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (n !== clubKey) return eq;
+          changed = true;
+          const base = (eq && typeof eq.toObject === 'function') ? eq.toObject() : { ...eq };
+          return {
+            ...base,
+            plantelNombres: uniquePlantelNames([
+              ...(Array.isArray(base.plantelNombres) ? base.plantelNombres : []),
+              name
+            ])
+          };
+        });
+        if (changed) {
+          ev.markModified('datosEspecificos');
+          await ev.save();
+        }
+      }
+    } catch (propErr) {
+      console.warn('No se pudo propagar jugador a eventos:', propErr?.message);
+    }
 
     res.json({
       success: true,
@@ -543,10 +592,16 @@ const removerJugadorDeEquipo = async (req, res) => {
       });
     }
 
+    const jugador = await Jugador.findById(jugadorId);
     // Remover jugador del equipo
     equipo.jugadores = equipo.jugadores.filter(
       j => j.jugador.toString() !== jugadorId
     );
+
+    if (jugador) {
+      const { removeJugadorNameFromPlantel } = require('../utils/plantelSync');
+      await removeJugadorNameFromPlantel(equipo, jugador);
+    }
 
     await equipo.save();
 

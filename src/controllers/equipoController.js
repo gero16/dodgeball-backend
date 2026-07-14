@@ -358,6 +358,10 @@ const actualizarEquipo = async (req, res) => {
   try {
     const { id } = req.params;
     const datosActualizacion = { ...(req.body || {}) };
+    const {
+      uniquePlantelNames,
+      syncEquipoJugadoresFromNombres
+    } = require('../utils/plantelSync');
 
     const norm = (s) => (s || '')
       .toString()
@@ -367,20 +371,13 @@ const actualizarEquipo = async (req, res) => {
       .replace(/\s+/g, ' ')
       .trim();
 
+    let plantelActualizado = null;
     if (Array.isArray(datosActualizacion.plantelNombres)) {
-      const seen = new Set();
-      datosActualizacion.plantelNombres = datosActualizacion.plantelNombres
-        .map((n) => String(n || '').trim())
-        .filter((n) => {
-          if (!n) return false;
-          const k = norm(n);
-          if (seen.has(k)) return false;
-          seen.add(k);
-          return true;
-        });
+      plantelActualizado = uniquePlantelNames(datosActualizacion.plantelNombres);
+      datosActualizacion.plantelNombres = plantelActualizado;
     }
 
-    const equipo = await Equipo.findByIdAndUpdate(
+    let equipo = await Equipo.findByIdAndUpdate(
       id,
       datosActualizacion,
       { new: true, runValidators: true }
@@ -393,11 +390,23 @@ const actualizarEquipo = async (req, res) => {
       });
     }
 
+    // plantelNombres → crear/vincular documentos Jugador (fuente de verdad por ID)
+    if (plantelActualizado) {
+      try {
+        equipo = await syncEquipoJugadoresFromNombres(equipo._id, plantelActualizado, {
+          replace: true
+        });
+        equipo = await Equipo.findById(equipo._id).populate('jugadores.jugador', 'nombre apellido activo');
+      } catch (syncErr) {
+        console.warn('No se pudo sincronizar Jugadores del plantel:', syncErr?.message);
+      }
+    }
+
     // Si se actualizó el plantel del club, replicarlo a todos los eventos donde participa
-    if (Array.isArray(datosActualizacion.plantelNombres)) {
+    if (plantelActualizado) {
       try {
         const eventos = await Evento.find({}).select('datosEspecificos');
-        const plantel = datosActualizacion.plantelNombres;
+        const plantel = plantelActualizado;
         const clubKey = norm(equipo.nombre);
         for (const ev of eventos) {
           if (!ev.datosEspecificos) continue;
