@@ -226,11 +226,12 @@ const actualizarEstadisticasJugador = async (req, res) => {
   }
 };
 
-// Obtener estadísticas de un jugador (agregadas desde tabla Estadistica)
+// Obtener estadísticas de un jugador (agregadas desde tabla Estadistica + partidos embebidos)
 const obtenerEstadisticasJugador = async (req, res) => {
   try {
     const { jugadorId } = req.params;
     const { equipoId, eventoId } = req.query;
+    const { displayName, normalizeName, isMembershipActive } = require('../utils/plantelSync');
 
     const jugador = await Jugador.findById(jugadorId)
       .populate('usuario', 'nombre email');
@@ -263,11 +264,33 @@ const obtenerEstadisticasJugador = async (req, res) => {
         catches: { $sum: '$catches' },
         bloqueosIntentados: { $sum: '$bloqueosIntentados' },
         bloqueos: { $sum: '$bloqueos' },
-        catchesRecibidos: { $sum: '$catchesRecibidos' }
+        catchesRecibidos: { $sum: '$catchesRecibidos' },
+        partidosJugados: { $sum: '$partidosJugados' }
       }}
     ]);
 
-    const estadisticas = agg[0] ? {
+    const emptyStats = () => ({
+      setsJugados: 0,
+      tirosTotales: 0,
+      hits: 0,
+      quemados: 0,
+      asistencias: 0,
+      tirosRecibidos: 0,
+      hitsRecibidos: 0,
+      esquives: 0,
+      esquivesExitosos: 0,
+      ponchado: 0,
+      catchesIntentados: 0,
+      catches: 0,
+      bloqueosIntentados: 0,
+      bloqueos: 0,
+      pisoLinea: 0,
+      catchesRecibidos: 0,
+      partidosJugados: 0
+    });
+
+    const fromCollection = agg[0] ? {
+      ...emptyStats(),
       setsJugados: agg[0].setsJugados || 0,
       tirosTotales: agg[0].tirosTotales || 0,
       hits: agg[0].hits || 0,
@@ -281,12 +304,81 @@ const obtenerEstadisticasJugador = async (req, res) => {
       catches: agg[0].catches || 0,
       bloqueosIntentados: agg[0].bloqueosIntentados || 0,
       bloqueos: agg[0].bloqueos || 0,
-      catchesRecibidos: agg[0].catchesRecibidos || 0
-    } : {};
+      catchesRecibidos: agg[0].catchesRecibidos || 0,
+      partidosJugados: agg[0].partidosJugados || 0
+    } : emptyStats();
 
-    const equipos = await Equipo.find({ 'jugadores.jugador': jugadorId, activo: true })
-      .select('nombre tipo pais ciudad')
+    // Also sum from Evento partidos (carga por sets) by player name
+    const nameKey = normalizeName(displayName(jugador));
+    const fromEventos = emptyStats();
+    const partidosIds = new Set();
+    try {
+      const eventosQuery = eventoId
+        ? Evento.find({ _id: eventoId }).select('titulo datosEspecificos').lean()
+        : Evento.find({}).select('titulo datosEspecificos').lean();
+      const eventos = await eventosQuery;
+      for (const ev of eventos || []) {
+        const ds = ev?.datosEspecificos || {};
+        const partidos = ds.liga?.partidos || ds.campeonato?.partidos || ds.torneo?.partidos || [];
+        for (const p of partidos) {
+          const rows = Array.isArray(p?.estadisticasJugadores) ? p.estadisticasJugadores : [];
+          let matched = false;
+          for (const j of rows) {
+            if (normalizeName(j?.nombreJugador) !== nameKey) continue;
+            matched = true;
+            fromEventos.setsJugados += parseInt(j.setsJugados, 10) || 0;
+            fromEventos.tirosTotales += parseInt(j.tirosTotales, 10) || 0;
+            fromEventos.hits += parseInt(j.hits, 10) || 0;
+            fromEventos.quemados += parseInt(j.quemados, 10) || 0;
+            fromEventos.asistencias += parseInt(j.asistencias, 10) || 0;
+            fromEventos.tirosRecibidos += parseInt(j.tirosRecibidos, 10) || 0;
+            fromEventos.hitsRecibidos += parseInt(j.hitsRecibidos, 10) || 0;
+            fromEventos.esquives += parseInt(j.dodges || j.esquives, 10) || 0;
+            fromEventos.esquivesExitosos += parseInt(j.esquivesExitosos, 10) || 0;
+            fromEventos.ponchado += parseInt(j.ponchado, 10) || 0;
+            fromEventos.catchesIntentados += parseInt(j.catchesIntentos || j.catchesIntentados, 10) || 0;
+            fromEventos.catches += parseInt(j.catches, 10) || 0;
+            fromEventos.bloqueosIntentados += parseInt(j.bloqueosIntentos || j.bloqueosIntentados, 10) || 0;
+            fromEventos.bloqueos += parseInt(j.bloqueos, 10) || 0;
+            fromEventos.pisoLinea += parseInt(j.pisoLinea, 10) || 0;
+            fromEventos.catchesRecibidos += parseInt(j.catchesRecibidos, 10) || 0;
+          }
+          if (matched) {
+            partidosIds.add(`${ev._id}-${p._id || p.fecha || ''}-${p.equipoLocal}-${p.equipoVisitante}`);
+          }
+        }
+      }
+      fromEventos.partidosJugados = partidosIds.size;
+    } catch (evErr) {
+      console.warn('No se pudieron sumar stats desde eventos:', evErr?.message);
+    }
+
+    // Prefer the richer source (sets from events usually); take max per field to avoid double-count when both exist
+    const estadisticas = emptyStats();
+    for (const k of Object.keys(estadisticas)) {
+      estadisticas[k] = Math.max(fromCollection[k] || 0, fromEventos[k] || 0);
+    }
+    estadisticas.fuente = (fromEventos.tirosTotales + fromEventos.setsJugados) >= (fromCollection.tirosTotales + fromCollection.setsJugados)
+      ? 'eventos'
+      : 'estadistica';
+
+    const equiposDocs = await Equipo.find({ 'jugadores.jugador': jugadorId, activo: true })
+      .select('nombre tipo pais ciudad jugadores')
       .lean();
+
+    const equipos = equiposDocs.map((e) => {
+      const row = (e.jugadores || []).find((j) => j.jugador?.toString() === jugadorId);
+      return {
+        _id: e._id,
+        nombre: e.nombre,
+        tipo: e.tipo,
+        pais: e.pais,
+        ciudad: e.ciudad,
+        activo: isMembershipActive(row),
+        fechaIngreso: row?.fechaIngreso || null,
+        fechaHasta: row?.fechaHasta || null
+      };
+    });
 
     res.json({
       success: true,
@@ -295,10 +387,13 @@ const obtenerEstadisticasJugador = async (req, res) => {
           id: jugador._id,
           nombre: jugador.nombre,
           apellido: jugador.apellido,
-          posicion: jugador.posicion
+          nombreCompleto: displayName(jugador),
+          posicion: jugador.posicion,
+          numeroCamiseta: jugador.numeroCamiseta || null,
+          activo: jugador.activo !== false
         },
         estadisticas,
-        equipos: equipos.map((e) => ({ _id: e._id, nombre: e.nombre, tipo: e.tipo, pais: e.pais, ciudad: e.ciudad }))
+        equipos
       }
     });
   } catch (error) {
