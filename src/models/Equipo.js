@@ -52,6 +52,12 @@ const equipoSchema = new mongoose.Schema({
     type: String,
     default: '#FFFFFF'
   },
+
+  /** Nombres libres del plantel del club (compartido entre eventos). */
+  plantelNombres: {
+    type: [String],
+    default: []
+  },
   
   // Jugadores del equipo
   jugadores: [{

@@ -14,6 +14,57 @@ const {
   agregarTotalesEquipoDesdeJugadores
 } = require('../utils/estadisticas');
 
+const normPlantelName = (s) => (s || '')
+  .toString()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const uniquePlantelNames = (names) => {
+  const seen = new Set();
+  const out = [];
+  for (const n of names || []) {
+    const name = String(n || '').trim();
+    if (!name) continue;
+    const k = normPlantelName(name);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(name);
+  }
+  return out;
+};
+
+/** Fusiona nombres al plantel del club (Equipo) para que existan en todos los eventos. */
+const syncPlantelAlClub = async (equipoNombre, nombres) => {
+  const nombre = String(equipoNombre || '').trim();
+  const lista = uniquePlantelNames(nombres);
+  if (!nombre || !lista.length) return;
+  try {
+    const escaped = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const eq = await Equipo.findOne({
+      nombre: { $regex: new RegExp(`^${escaped}$`, 'i') }
+    });
+    if (!eq) return;
+    const merged = uniquePlantelNames([
+      ...(Array.isArray(eq.plantelNombres) ? eq.plantelNombres : []),
+      ...lista
+    ]);
+    eq.plantelNombres = merged;
+    eq.markModified('plantelNombres');
+    await eq.save();
+  } catch (err) {
+    console.warn('No se pudo sincronizar plantel al club:', nombre, err?.message);
+  }
+};
+
+/** Extrae equipos (con plantel) de liga/campeonato/torneo de un evento lean. */
+const equiposFromEventoDoc = (ev) => {
+  const ds = ev?.datosEspecificos || {};
+  return ds.liga?.equipos || ds.campeonato?.equipos || ds.torneo?.equipos || [];
+};
+
 // Utilidad: construir resumen por categoría/equipo/jugador a partir de filas crudas
 function buildSummaryFromRows(rows) {
   // Mapeo de alias -> clave canónica
@@ -1759,7 +1810,7 @@ const actualizarEquiposLiga = async (req, res) => {
     evento.markModified('datosEspecificos');
     await evento.save();
 
-    // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria
+    // Sincronizar a colección Equipo (modelo global) para fotoPortada, fotoInfo, galeria + plantel
     for (const eq of incoming) {
       if (!eq?.nombre) continue;
       try {
@@ -1782,6 +1833,9 @@ const actualizarEquiposLiga = async (req, res) => {
           },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
+        if (Array.isArray(eq.plantelNombres) && eq.plantelNombres.length) {
+          await syncPlantelAlClub(eq.nombre, eq.plantelNombres);
+        }
       } catch (err) {
         console.warn('No se pudo sincronizar equipo a Equipo:', eq.nombre, err.message);
       }
@@ -1853,6 +1907,7 @@ const agregarJugadorPlantel = async (req, res) => {
     ds[key].equipos = equipos;
     evento.markModified('datosEspecificos');
     await evento.save();
+    await syncPlantelAlClub(equipos[idx].nombre, [nombre]);
 
     return res.json({
       success: true,
@@ -2877,6 +2932,61 @@ const obtenerJugadoresEvento = async (req, res) => {
       .toLowerCase()
       .replace(/\s+/g, ' ')
       .trim();
+
+    const addNombreLibre = (byName, n) => {
+      const nombre = String(n || '').trim();
+      if (!nombre) return;
+      const key = normKey(nombre);
+      if (!byName.has(key)) {
+        byName.set(key, {
+          id: null,
+          nombre,
+          apellido: '',
+          nombreCompleto: nombre,
+          numeroCamiseta: null,
+          posicion: null
+        });
+      }
+    };
+
+    // Planteles del mismo club en otros eventos + plantel club (Equipo.plantelNombres)
+    const plantelExtraByTeam = new Map(); // normKey(nombreEquipo) -> string[]
+    try {
+      const todosEventos = await Evento.find({})
+        .select('datosEspecificos')
+        .lean();
+      for (const other of todosEventos) {
+        for (const oeq of equiposFromEventoDoc(other)) {
+          if (!oeq?.nombre) continue;
+          const k = normKey(oeq.nombre);
+          if (!nombresEquipos.some((n) => normKey(n) === k)) continue;
+          const prev = plantelExtraByTeam.get(k) || [];
+          plantelExtraByTeam.set(
+            k,
+            uniquePlantelNames([
+              ...prev,
+              ...(Array.isArray(oeq.plantelNombres) ? oeq.plantelNombres : [])
+            ])
+          );
+        }
+      }
+      for (const eqDb of equiposDocs) {
+        if (!eqDb?.nombre) continue;
+        const k = normKey(eqDb.nombre);
+        if (!nombresEquipos.some((n) => normKey(n) === k)) continue;
+        const prev = plantelExtraByTeam.get(k) || [];
+        plantelExtraByTeam.set(
+          k,
+          uniquePlantelNames([
+            ...prev,
+            ...(Array.isArray(eqDb.plantelNombres) ? eqDb.plantelNombres : [])
+          ])
+        );
+      }
+    } catch (e) {
+      console.warn('No se pudieron cargar planteles históricos:', e?.message);
+    }
+
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
       // localizar entrada aunque difiera mayúsculas
@@ -2885,27 +2995,26 @@ const obtenerJugadoresEvento = async (req, res) => {
         const foundKey = [...equiposMap.keys()].find((k) => normKey(k) === normKey(eq.nombre));
         actuales = foundKey ? equiposMap.get(foundKey) : [];
       }
-      const nombres = (eq.plantelNombres || []).filter(Boolean);
-      if (!nombres.length && (actuales || []).length) continue;
       const byName = new Map(
         (actuales || []).map((p) => [normKey(p.nombreCompleto), p])
       );
-      for (const n of nombres) {
-        const nombre = String(n).trim();
-        if (!nombre) continue;
-        const key = normKey(nombre);
-        if (!byName.has(key)) {
-          byName.set(key, {
-            id: null,
-            nombre,
-            apellido: '',
-            nombreCompleto: nombre,
-            numeroCamiseta: null,
-            posicion: null
-          });
-        }
-      }
+      const nombres = (eq.plantelNombres || []).filter(Boolean);
+      for (const n of nombres) addNombreLibre(byName, n);
+      const historicos = plantelExtraByTeam.get(normKey(eq.nombre)) || [];
+      for (const n of historicos) addNombreLibre(byName, n);
       equiposMap.set(eq.nombre, Array.from(byName.values()));
+    }
+
+    // Persistir en Equipo.plantelNombres el union de planteles libres (evento + histórico)
+    for (const eq of ligaEquipos) {
+      if (!eq?.nombre) continue;
+      const toSync = uniquePlantelNames([
+        ...(Array.isArray(eq.plantelNombres) ? eq.plantelNombres : []),
+        ...(plantelExtraByTeam.get(normKey(eq.nombre)) || [])
+      ]);
+      if (toSync.length) {
+        syncPlantelAlClub(eq.nombre, toSync).catch(() => {});
+      }
     }
 
     const eventoNombreToId = new Map();
