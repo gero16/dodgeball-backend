@@ -20,18 +20,24 @@ const conectarDB = async () => {
 
 const inicializarDatos = async () => {
   try {
-    // Crear usuario administrador
-    const adminExiste = await Usuario.findOne({ email: 'admin@dodgeball.com' });
+    // Crear usuario superadministrador
+    const adminExiste = await Usuario.findOne({
+      email: 'admin@dodgeball.com'
+    });
     if (!adminExiste) {
       const admin = new Usuario({
         nombre: 'Administrador',
         email: 'admin@dodgeball.com',
         password: 'admin123',
-        rol: 'admin',
+        rol: 'superadmin',
         telefono: '+1234567890'
       });
       await admin.save();
-      console.log('Usuario administrador creado');
+      console.log('Usuario superadministrador creado');
+    } else if (adminExiste.rol === 'admin') {
+      adminExiste.rol = 'superadmin';
+      await adminExiste.save();
+      console.log('admin@dodgeball.com promovido a superadmin');
     }
 
     // Crear publicaciones de ejemplo

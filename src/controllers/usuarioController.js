@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Usuario = require('../models/Usuario');
+const { ROLES, ROLES_VALIDOS, isSuperAdmin } = require('../utils/roles');
 
 // Registrar nuevo usuario
 const registrarUsuario = async (req, res) => {
@@ -189,24 +190,31 @@ const cambiarPassword = async (req, res) => {
 // Obtener todos los usuarios (admin)
 const obtenerUsuarios = async (req, res) => {
   try {
-    const { pagina = 1, limite = 10, busqueda = '', rol = '' } = req.query;
+    const { pagina = 1, limite = 10, busqueda = '', rol = '', activo = 'true' } = req.query;
     const skip = (pagina - 1) * limite;
 
-    let filtros = { activo: true };
-    
+    let filtros = {};
+
+    if (activo === 'true') {
+      filtros.activo = true;
+    } else if (activo === 'false') {
+      filtros.activo = false;
+    }
+    // activo === 'todos' → sin filtro de activo
+
     if (busqueda) {
       filtros.$or = [
         { nombre: { $regex: busqueda, $options: 'i' } },
         { email: { $regex: busqueda, $options: 'i' } }
       ];
     }
-    
+
     if (rol) {
       filtros.rol = rol;
     }
 
     const usuarios = await Usuario.find(filtros)
-      .select('-password')
+      .select('-password -tokenRecuperacion -expiracionToken')
       .sort({ fechaRegistro: -1 })
       .skip(skip)
       .limit(parseInt(limite));
@@ -234,10 +242,38 @@ const obtenerUsuarios = async (req, res) => {
   }
 };
 
-// Eliminar usuario (admin)
-const eliminarUsuario = async (req, res) => {
+// Obtener un usuario por ID (admin)
+const obtenerUsuarioPorId = async (req, res) => {
   try {
     const { id } = req.params;
+    const usuario = await Usuario.findById(id).select('-password -tokenRecuperacion -expiracionToken');
+
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { usuario }
+    });
+  } catch (error) {
+    console.error('Error al obtener usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Actualizar usuario (superadmin): rol y/o estado activo
+const actualizarUsuarioAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rol, activo } = req.body;
+    const esMismoUsuario = String(req.usuario._id) === String(id);
 
     const usuario = await Usuario.findById(id);
     if (!usuario) {
@@ -245,6 +281,114 @@ const eliminarUsuario = async (req, res) => {
         success: false,
         message: 'Usuario no encontrado'
       });
+    }
+
+    if (rol !== undefined) {
+      if (!ROLES_VALIDOS.includes(rol)) {
+        return res.status(400).json({
+          success: false,
+          message: `Rol inválido. Valores permitidos: ${ROLES_VALIDOS.join(', ')}`
+        });
+      }
+      if (esMismoUsuario && !isSuperAdmin(rol)) {
+        return res.status(400).json({
+          success: false,
+          message: 'No podés quitarte el rol de super administrador a vos mismo'
+        });
+      }
+      if (isSuperAdmin(usuario.rol) && !isSuperAdmin(rol)) {
+        const otrosSuper = await Usuario.countDocuments({
+          rol: ROLES.SUPERADMIN,
+          activo: true,
+          _id: { $ne: usuario._id }
+        });
+        if (otrosSuper === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'No podés quitar el rol al único super administrador activo'
+          });
+        }
+      }
+      usuario.rol = rol;
+    }
+
+    if (activo !== undefined) {
+      if (typeof activo !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'El campo activo debe ser booleano'
+        });
+      }
+      if (esMismoUsuario && activo === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'No podés desactivar tu propia cuenta'
+        });
+      }
+      if (isSuperAdmin(usuario.rol) && activo === false && !esMismoUsuario) {
+        const otrosSuper = await Usuario.countDocuments({
+          rol: ROLES.SUPERADMIN,
+          activo: true,
+          _id: { $ne: usuario._id }
+        });
+        if (otrosSuper === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'No podés desactivar al único super administrador activo'
+          });
+        }
+      }
+      usuario.activo = activo;
+    }
+
+    await usuario.save();
+
+    res.json({
+      success: true,
+      message: 'Usuario actualizado exitosamente',
+      data: { usuario: usuario.toJSON() }
+    });
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+};
+
+// Eliminar usuario (superadmin)
+const eliminarUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (String(req.usuario._id) === String(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'No podés desactivar tu propia cuenta'
+      });
+    }
+
+    const usuario = await Usuario.findById(id);
+    if (!usuario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    if (isSuperAdmin(usuario.rol)) {
+      const otrosSuper = await Usuario.countDocuments({
+        rol: ROLES.SUPERADMIN,
+        activo: true,
+        _id: { $ne: usuario._id }
+      });
+      if (otrosSuper === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No podés desactivar al único super administrador activo'
+        });
+      }
     }
 
     // Desactivar usuario en lugar de eliminarlo
@@ -271,5 +415,7 @@ module.exports = {
   actualizarPerfil,
   cambiarPassword,
   obtenerUsuarios,
+  obtenerUsuarioPorId,
+  actualizarUsuarioAdmin,
   eliminarUsuario
 };
