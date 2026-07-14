@@ -1,5 +1,6 @@
 const Publicacion = require('../models/Publicacion');
 const mongoose = require('mongoose');
+const { isStaff } = require('../utils/roles');
 
 // Obtener todas las publicaciones
 const obtenerPublicaciones = async (req, res) => {
@@ -159,7 +160,7 @@ const actualizarPublicacion = async (req, res) => {
       if (!req.usuario) {
         return res.status(401).json({ success: false, message: 'No autorizado' });
       }
-      if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
+      if (publicacion.autor.toString() !== usuarioId && !isStaff(req.usuario.rol)) {
         return res.status(403).json({
           success: false,
           message: 'No tienes permisos para editar esta publicación'
@@ -221,7 +222,7 @@ const eliminarPublicacion = async (req, res) => {
       if (!req.usuario) {
         return res.status(401).json({ success: false, message: 'No autorizado' });
       }
-      if (publicacion.autor.toString() !== usuarioId && req.usuario.rol !== 'admin') {
+      if (publicacion.autor.toString() !== usuarioId && !isStaff(req.usuario.rol)) {
         return res.status(403).json({
           success: false,
           message: 'No tienes permisos para eliminar esta publicación'
