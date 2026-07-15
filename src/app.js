@@ -19,6 +19,7 @@ const jugadorRoutes = require('./routes/jugadorRoutes');
 const equipoRoutes = require('./routes/equipoRoutes');
 const partidoRoutes = require('./routes/partidoRoutes');
 const estadisticaRoutes = require('./routes/estadisticaRoutes');
+const instagramRoutes = require('./routes/instagramRoutes');
 
 const app = express();
 
@@ -107,6 +108,7 @@ app.use('/api/jugadores', jugadorRoutes);
 app.use('/api/equipos', equipoRoutes);
 app.use('/api/partidos', partidoRoutes);
 app.use('/api/estadisticas', estadisticaRoutes);
+app.use('/api/instagram', instagramRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {
@@ -136,6 +138,7 @@ app.get('/', (req, res) => {
       equipos: '/api/equipos',
       partidos: '/api/partidos',
       estadisticas: '/api/estadisticas',
+      instagram: '/api/instagram',
       salud: '/api/health'
     }
   });

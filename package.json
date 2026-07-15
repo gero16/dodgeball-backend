@@ -9,6 +9,7 @@
     "init-db": "node scripts/init-db.js",
     "migrate-superadmin": "node scripts/migrate-superadmin.js",
     "migrate-plantel": "node scripts/migrate-plantel-to-jugadores.js",
+    "seed-instagram": "node scripts/seed-instagram.js",
     "test-mongodb": "node scripts/test-mongodb.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
