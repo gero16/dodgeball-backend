@@ -65,7 +65,7 @@ const obtenerEquipoPorNombre = async (req, res) => {
       nombre: { $regex: new RegExp('^' + escapeRegex(nombre) + '$', 'i') },
       activo: true
     })
-      .populate('jugadores.jugador', 'nombre apellido posicion')
+      .populate('jugadores.jugador', 'nombre apellido posicion activo')
       .lean();
 
     if (!equipo) {
@@ -75,9 +75,24 @@ const obtenerEquipoPorNombre = async (req, res) => {
       });
     }
 
+    const { isMembershipActive, displayName, uniquePlantelNames } = require('../utils/plantelSync');
+    const jugadoresActivos = (equipo.jugadores || []).filter(
+      (row) => row?.jugador && row.jugador.activo !== false && isMembershipActive(row)
+    );
+    // Si hay plantelNombres guardado, es la lista autoritativa; si no, espejo desde membresías
+    const plantelNombres = Array.isArray(equipo.plantelNombres)
+      ? uniquePlantelNames(equipo.plantelNombres)
+      : uniquePlantelNames(jugadoresActivos.map((row) => displayName(row.jugador)).filter(Boolean));
+
     res.json({
       success: true,
-      data: { equipo }
+      data: {
+        equipo: {
+          ...equipo,
+          plantelNombres,
+          jugadores: jugadoresActivos
+        }
+      }
     });
   } catch (error) {
     console.error('Error obteniendo equipo por nombre:', error);
@@ -283,7 +298,7 @@ const obtenerEquipo = async (req, res) => {
     const { id } = req.params;
 
     const equipo = await Equipo.findById(id)
-      .populate('jugadores.jugador', 'nombre apellido posicion');
+      .populate('jugadores.jugador', 'nombre apellido posicion activo');
 
     if (!equipo) {
       return res.status(404).json({
@@ -292,9 +307,15 @@ const obtenerEquipo = async (req, res) => {
       });
     }
 
+    const { isMembershipActive } = require('../utils/plantelSync');
+    const equipoObj = equipo.toObject();
+    equipoObj.jugadores = (equipoObj.jugadores || []).filter(
+      (row) => row?.jugador && row.jugador.activo !== false && isMembershipActive(row)
+    );
+
     res.json({
       success: true,
-      data: { equipo }
+      data: { equipo: equipoObj }
     });
 
   } catch (error) {
