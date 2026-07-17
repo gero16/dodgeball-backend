@@ -226,7 +226,7 @@ const actualizarEstadisticasJugador = async (req, res) => {
   }
 };
 
-// Obtener estadísticas de un jugador (agregadas desde tabla Estadistica + partidos embebidos)
+// Obtener estadísticas de un jugador (agregadas + desglose por evento/partido)
 const obtenerEstadisticasJugador = async (req, res) => {
   try {
     const { jugadorId } = req.params;
@@ -242,32 +242,6 @@ const obtenerEstadisticasJugador = async (req, res) => {
         message: 'Jugador no encontrado'
       });
     }
-
-    const match = { jugador: jugadorId, activo: true };
-    if (equipoId) match.equipo = equipoId;
-    if (eventoId) match.evento = eventoId;
-
-    const agg = await Estadistica.aggregate([
-      { $match: match },
-      { $group: {
-        _id: null,
-        setsJugados: { $sum: '$setsJugados' },
-        tirosTotales: { $sum: '$tirosTotales' },
-        hits: { $sum: '$hits' },
-        quemados: { $sum: '$quemados' },
-        asistencias: { $sum: '$asistencias' },
-        tirosRecibidos: { $sum: '$tirosRecibidos' },
-        hitsRecibidos: { $sum: '$hitsRecibidos' },
-        esquives: { $sum: '$esquives' },
-        ponchado: { $sum: '$ponchado' },
-        catchesIntentados: { $sum: '$catchesIntentados' },
-        catches: { $sum: '$catches' },
-        bloqueosIntentados: { $sum: '$bloqueosIntentados' },
-        bloqueos: { $sum: '$bloqueos' },
-        catchesRecibidos: { $sum: '$catchesRecibidos' },
-        partidosJugados: { $sum: '$partidosJugados' }
-      }}
-    ]);
 
     const emptyStats = () => ({
       setsJugados: 0,
@@ -289,6 +263,52 @@ const obtenerEstadisticasJugador = async (req, res) => {
       partidosJugados: 0
     });
 
+    const addRowToStats = (target, j) => {
+      target.setsJugados += parseInt(j.setsJugados, 10) || 0;
+      target.tirosTotales += parseInt(j.tirosTotales, 10) || 0;
+      target.hits += parseInt(j.hits, 10) || 0;
+      target.quemados += parseInt(j.quemados, 10) || 0;
+      target.asistencias += parseInt(j.asistencias, 10) || 0;
+      target.tirosRecibidos += parseInt(j.tirosRecibidos, 10) || 0;
+      target.hitsRecibidos += parseInt(j.hitsRecibidos, 10) || 0;
+      target.esquives += parseInt(j.dodges || j.esquives, 10) || 0;
+      target.esquivesExitosos += parseInt(j.esquivesExitosos || j.esquivesSinEsfuerzo, 10) || 0;
+      target.ponchado += parseInt(j.ponchado, 10) || 0;
+      target.catchesIntentados += parseInt(j.catchesIntentos || j.catchesIntentados, 10) || 0;
+      target.catches += parseInt(j.catches, 10) || 0;
+      target.bloqueosIntentados += parseInt(j.bloqueosIntentos || j.bloqueosIntentados, 10) || 0;
+      target.bloqueos += parseInt(j.bloqueos, 10) || 0;
+      target.pisoLinea += parseInt(j.pisoLinea, 10) || 0;
+      target.catchesRecibidos += parseInt(j.catchesRecibidos, 10) || 0;
+    };
+
+    const match = { jugador: jugadorId, activo: true };
+    if (equipoId) match.equipo = equipoId;
+    if (eventoId) match.evento = eventoId;
+
+    const agg = await Estadistica.aggregate([
+      { $match: match },
+      { $group: {
+        _id: null,
+        setsJugados: { $sum: '$setsJugados' },
+        tirosTotales: { $sum: '$tirosTotales' },
+        hits: { $sum: '$hits' },
+        quemados: { $sum: '$quemados' },
+        asistencias: { $sum: '$asistencias' },
+        tirosRecibidos: { $sum: '$tirosRecibidos' },
+        hitsRecibidos: { $sum: '$hitsRecibidos' },
+        esquives: { $sum: '$esquives' },
+        esquivesExitosos: { $sum: '$esquivesSinEsfuerzo' },
+        ponchado: { $sum: '$ponchado' },
+        catchesIntentados: { $sum: '$catchesIntentados' },
+        catches: { $sum: '$catches' },
+        bloqueosIntentados: { $sum: '$bloqueosIntentados' },
+        bloqueos: { $sum: '$bloqueos' },
+        catchesRecibidos: { $sum: '$catchesRecibidos' },
+        partidosJugados: { $sum: '$partidosJugados' }
+      }}
+    ]);
+
     const fromCollection = agg[0] ? {
       ...emptyStats(),
       setsJugados: agg[0].setsJugados || 0,
@@ -299,6 +319,7 @@ const obtenerEstadisticasJugador = async (req, res) => {
       tirosRecibidos: agg[0].tirosRecibidos || 0,
       hitsRecibidos: agg[0].hitsRecibidos || 0,
       esquives: agg[0].esquives || 0,
+      esquivesExitosos: agg[0].esquivesExitosos || 0,
       ponchado: agg[0].ponchado || 0,
       catchesIntentados: agg[0].catchesIntentados || 0,
       catches: agg[0].catches || 0,
@@ -308,52 +329,80 @@ const obtenerEstadisticasJugador = async (req, res) => {
       partidosJugados: agg[0].partidosJugados || 0
     } : emptyStats();
 
-    // Also sum from Evento partidos (carga por sets) by player name
+    // Desglose desde partidos embebidos en eventos (carga por sets / pegado)
     const nameKey = normalizeName(displayName(jugador));
     const fromEventos = emptyStats();
-    const partidosIds = new Set();
+    const porEventoMap = new Map(); // eventoId -> { ... }
+
     try {
       const eventosQuery = eventoId
-        ? Evento.find({ _id: eventoId }).select('titulo datosEspecificos').lean()
-        : Evento.find({}).select('titulo datosEspecificos').lean();
+        ? Evento.find({ _id: eventoId }).select('titulo fechaInicio fechaFin datosEspecificos').lean()
+        : Evento.find({}).select('titulo fechaInicio fechaFin datosEspecificos').lean();
       const eventos = await eventosQuery;
+
       for (const ev of eventos || []) {
         const ds = ev?.datosEspecificos || {};
         const partidos = ds.liga?.partidos || ds.campeonato?.partidos || ds.torneo?.partidos || [];
+        const evId = String(ev._id);
+        let eventoBucket = porEventoMap.get(evId);
+
         for (const p of partidos) {
           const rows = Array.isArray(p?.estadisticasJugadores) ? p.estadisticasJugadores : [];
-          let matched = false;
-          for (const j of rows) {
-            if (normalizeName(j?.nombreJugador) !== nameKey) continue;
-            matched = true;
-            fromEventos.setsJugados += parseInt(j.setsJugados, 10) || 0;
-            fromEventos.tirosTotales += parseInt(j.tirosTotales, 10) || 0;
-            fromEventos.hits += parseInt(j.hits, 10) || 0;
-            fromEventos.quemados += parseInt(j.quemados, 10) || 0;
-            fromEventos.asistencias += parseInt(j.asistencias, 10) || 0;
-            fromEventos.tirosRecibidos += parseInt(j.tirosRecibidos, 10) || 0;
-            fromEventos.hitsRecibidos += parseInt(j.hitsRecibidos, 10) || 0;
-            fromEventos.esquives += parseInt(j.dodges || j.esquives, 10) || 0;
-            fromEventos.esquivesExitosos += parseInt(j.esquivesExitosos, 10) || 0;
-            fromEventos.ponchado += parseInt(j.ponchado, 10) || 0;
-            fromEventos.catchesIntentados += parseInt(j.catchesIntentos || j.catchesIntentados, 10) || 0;
-            fromEventos.catches += parseInt(j.catches, 10) || 0;
-            fromEventos.bloqueosIntentados += parseInt(j.bloqueosIntentos || j.bloqueosIntentados, 10) || 0;
-            fromEventos.bloqueos += parseInt(j.bloqueos, 10) || 0;
-            fromEventos.pisoLinea += parseInt(j.pisoLinea, 10) || 0;
-            fromEventos.catchesRecibidos += parseInt(j.catchesRecibidos, 10) || 0;
+          const matchedRows = rows.filter((j) => normalizeName(j?.nombreJugador) === nameKey);
+          if (!matchedRows.length) continue;
+
+          const partidoStats = emptyStats();
+          let lado = null;
+          for (const j of matchedRows) {
+            addRowToStats(fromEventos, j);
+            addRowToStats(partidoStats, j);
+            if (!lado && j.equipo) lado = j.equipo === 'visitante' ? 'visitante' : 'local';
           }
-          if (matched) {
-            partidosIds.add(`${ev._id}-${p._id || p.fecha || ''}-${p.equipoLocal}-${p.equipoVisitante}`);
+          partidoStats.partidosJugados = 1;
+          fromEventos.partidosJugados += 1;
+
+          if (!eventoBucket) {
+            eventoBucket = {
+              eventoId: evId,
+              titulo: ev.titulo || 'Evento',
+              fechaInicio: ev.fechaInicio || null,
+              fechaFin: ev.fechaFin || null,
+              estadisticas: emptyStats(),
+              partidos: []
+            };
+            porEventoMap.set(evId, eventoBucket);
           }
+
+          for (const k of Object.keys(partidoStats)) {
+            if (k === 'partidosJugados') {
+              eventoBucket.estadisticas.partidosJugados += partidoStats.partidosJugados;
+            } else {
+              eventoBucket.estadisticas[k] += partidoStats[k] || 0;
+            }
+          }
+
+          eventoBucket.partidos.push({
+            partidoId: p._id ? String(p._id) : null,
+            fecha: p.fecha || null,
+            hora: p.hora || null,
+            equipoLocal: p.equipoLocal || '',
+            equipoVisitante: p.equipoVisitante || '',
+            golesLocal: p.golesLocal ?? null,
+            golesVisitante: p.golesVisitante ?? null,
+            estado: p.estado || null,
+            lado: lado || null,
+            equipoDelJugador: lado === 'visitante'
+              ? (p.equipoVisitante || '')
+              : (lado === 'local' ? (p.equipoLocal || '') : ''),
+            estadisticas: partidoStats
+          });
         }
       }
-      fromEventos.partidosJugados = partidosIds.size;
     } catch (evErr) {
       console.warn('No se pudieron sumar stats desde eventos:', evErr?.message);
     }
 
-    // Prefer the richer source (sets from events usually); take max per field to avoid double-count when both exist
+    // Preferir la fuente más rica por campo (evitar doble conteo cuando ambas existen)
     const estadisticas = emptyStats();
     for (const k of Object.keys(estadisticas)) {
       estadisticas[k] = Math.max(fromCollection[k] || 0, fromEventos[k] || 0);
@@ -361,6 +410,22 @@ const obtenerEstadisticasJugador = async (req, res) => {
     estadisticas.fuente = (fromEventos.tirosTotales + fromEventos.setsJugados) >= (fromCollection.tirosTotales + fromCollection.setsJugados)
       ? 'eventos'
       : 'estadistica';
+
+    const porEvento = Array.from(porEventoMap.values())
+      .map((ev) => ({
+        ...ev,
+        partidos: [...ev.partidos].sort((a, b) => {
+          const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
+          const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
+          return fb - fa;
+        })
+      }))
+      .sort((a, b) => {
+        const fa = a.fechaInicio ? new Date(a.fechaInicio).getTime() : 0;
+        const fb = b.fechaInicio ? new Date(b.fechaInicio).getTime() : 0;
+        if (fb !== fa) return fb - fa;
+        return String(a.titulo || '').localeCompare(String(b.titulo || ''), 'es');
+      });
 
     const equiposDocs = await Equipo.find({ 'jugadores.jugador': jugadorId, activo: true })
       .select('nombre tipo pais ciudad jugadores')
@@ -393,6 +458,7 @@ const obtenerEstadisticasJugador = async (req, res) => {
           activo: jugador.activo !== false
         },
         estadisticas,
+        porEvento,
         equipos
       }
     });
