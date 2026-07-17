@@ -36,21 +36,37 @@ const uniquePlantelNames = (names) => {
   return out;
 };
 
-/** Fusiona nombres al plantel del club + vincula documentos Jugador. */
-const syncPlantelAlClub = async (equipoNombre, nombres) => {
+/**
+ * Sincroniza nombres al plantel del club + vincula documentos Jugador.
+ * @param {boolean} [opts.replace=false] — si true, baja del club a quien no esté en la lista
+ */
+const syncPlantelAlClub = async (equipoNombre, nombres, { replace = false } = {}) => {
   const nombre = String(equipoNombre || '').trim();
   const lista = uniquePlantelNames(nombres);
-  if (!nombre || !lista.length) return;
+  if (!nombre) return null;
+  if (!replace && !lista.length) return null;
   try {
-    const { syncEquipoJugadoresFromNombres } = require('../utils/plantelSync');
+    const {
+      syncEquipoJugadoresFromNombres,
+      propagatePlantelNombresToEventos
+    } = require('../utils/plantelSync');
     const escaped = nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const eq = await Equipo.findOne({
       nombre: { $regex: new RegExp(`^${escaped}$`, 'i') }
     });
-    if (!eq) return;
-    await syncEquipoJugadoresFromNombres(eq, lista, { replace: false });
+    if (!eq) return null;
+    const updated = await syncEquipoJugadoresFromNombres(eq, lista, { replace });
+    if (replace && updated) {
+      try {
+        await propagatePlantelNombresToEventos(updated);
+      } catch (propErr) {
+        console.warn('No se pudo propagar plantel a eventos:', propErr?.message);
+      }
+    }
+    return updated;
   } catch (err) {
     console.warn('No se pudo sincronizar plantel al club:', nombre, err?.message);
+    return null;
   }
 };
 
@@ -1828,8 +1844,9 @@ const actualizarEquiposLiga = async (req, res) => {
           },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
-        if (Array.isArray(eq.plantelNombres) && eq.plantelNombres.length) {
-          await syncPlantelAlClub(eq.nombre, eq.plantelNombres);
+        // plantelNombres es lista autoritativa del editor: replace para que los quites persistan
+        if (Array.isArray(eq.plantelNombres)) {
+          await syncPlantelAlClub(eq.nombre, eq.plantelNombres, { replace: true });
         }
       } catch (err) {
         console.warn('No se pudo sincronizar equipo a Equipo:', eq.nombre, err.message);
@@ -2840,6 +2857,7 @@ const previsualizarHojaCalculoEstadisticas = async (req, res) => {
 const obtenerJugadoresEvento = async (req, res) => {
   try {
     const { id } = req.params;
+    const { isMembershipActive, displayName } = require('../utils/plantelSync');
     const evento = await Evento.findById(id)
       .populate('equipos.integrantes', 'nombre apellido')
       .lean();
@@ -2861,6 +2879,7 @@ const obtenerJugadoresEvento = async (req, res) => {
     const equiposMap = new Map();
     const nameToId = new Map();
     const norm = (s) => (s || '').toString().trim().toLowerCase();
+    const normKey = (s) => normPlantelName(s);
 
     // Usar siempre el nombre del evento como clave (ligaEquipos)
     for (const eq of ligaEquipos) {
@@ -2877,17 +2896,17 @@ const obtenerJugadoresEvento = async (req, res) => {
       if (evEq) dbNombreToEventoNombre.set(eqDb.nombre, evEq.nombre);
     }
 
-    // 1. Modelo Equipo (Jugador): fuente principal - jugadores del modelo global
+    // 1. Modelo Equipo: solo membresías activas (no rehidratar bajas)
     for (const eqDb of equiposDocs) {
       const nombreEvento = dbNombreToEventoNombre.get(eqDb.nombre);
       if (!nombreEvento) continue;
       const list = (eqDb.jugadores || [])
-        .filter(j => j.jugador && j.jugador.activo !== false)
-        .map(j => ({
+        .filter((j) => j.jugador && j.jugador.activo !== false && isMembershipActive(j))
+        .map((j) => ({
           id: j.jugador._id,
           nombre: j.jugador.nombre,
           apellido: j.jugador.apellido,
-          nombreCompleto: `${j.jugador.nombre} ${j.jugador.apellido}`.trim(),
+          nombreCompleto: displayName(j.jugador) || `${j.jugador.nombre} ${j.jugador.apellido}`.trim(),
           numeroCamiseta: j.numeroCamiseta || null,
           posicion: j.posicion || null
         }));
@@ -2902,7 +2921,7 @@ const obtenerJugadoresEvento = async (req, res) => {
       const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(eq.nombre));
       const nombreClave = evEq?.nombre || eq.nombre;
       const existentes = equiposMap.get(nombreClave) || [];
-      if (existentes.length > 0) continue; // ya tiene jugadores del modelo Equipo
+      if (existentes.length > 0) continue;
       const adicionales = (eq.integrantes || []).map(u => ({
         id: u._id,
         nombre: u.nombre,
@@ -2911,23 +2930,17 @@ const obtenerJugadoresEvento = async (req, res) => {
         numeroCamiseta: null,
         posicion: null
       }));
-      const byName = new Map(existentes.map(p => [p.nombreCompleto.toLowerCase(), p]));
+      const byName = new Map(existentes.map(p => [normKey(p.nombreCompleto), p]));
       for (const p of adicionales) {
-        const key = p.nombreCompleto.toLowerCase();
+        const key = normKey(p.nombreCompleto);
         if (!byName.has(key)) byName.set(key, p);
       }
       equiposMap.set(nombreClave, Array.from(byName.values()));
     }
 
-    // 3. plantelNombres del evento: siempre fusionar (nombres libres / plantel editado)
-    const normKey = (s) => (s || '')
-      .toString()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    // 3. plantelNombres del evento (autoritativo para este evento).
+    // No fusionar otros eventos ni Equipo.plantelNombres: eso rehidrataba bajas.
+    // No mutar el club en un GET.
     const addNombreLibre = (byName, n) => {
       const nombre = String(n || '').trim();
       if (!nombre) return;
@@ -2944,47 +2957,8 @@ const obtenerJugadoresEvento = async (req, res) => {
       }
     };
 
-    // Planteles del mismo club en otros eventos + plantel club (Equipo.plantelNombres)
-    const plantelExtraByTeam = new Map(); // normKey(nombreEquipo) -> string[]
-    try {
-      const todosEventos = await Evento.find({})
-        .select('datosEspecificos')
-        .lean();
-      for (const other of todosEventos) {
-        for (const oeq of equiposFromEventoDoc(other)) {
-          if (!oeq?.nombre) continue;
-          const k = normKey(oeq.nombre);
-          if (!nombresEquipos.some((n) => normKey(n) === k)) continue;
-          const prev = plantelExtraByTeam.get(k) || [];
-          plantelExtraByTeam.set(
-            k,
-            uniquePlantelNames([
-              ...prev,
-              ...(Array.isArray(oeq.plantelNombres) ? oeq.plantelNombres : [])
-            ])
-          );
-        }
-      }
-      for (const eqDb of equiposDocs) {
-        if (!eqDb?.nombre) continue;
-        const k = normKey(eqDb.nombre);
-        if (!nombresEquipos.some((n) => normKey(n) === k)) continue;
-        const prev = plantelExtraByTeam.get(k) || [];
-        plantelExtraByTeam.set(
-          k,
-          uniquePlantelNames([
-            ...prev,
-            ...(Array.isArray(eqDb.plantelNombres) ? eqDb.plantelNombres : [])
-          ])
-        );
-      }
-    } catch (e) {
-      console.warn('No se pudieron cargar planteles históricos:', e?.message);
-    }
-
     for (const eq of ligaEquipos) {
       if (!eq?.nombre) continue;
-      // localizar entrada aunque difiera mayúsculas
       let actuales = equiposMap.get(eq.nombre);
       if (!actuales) {
         const foundKey = [...equiposMap.keys()].find((k) => normKey(k) === normKey(eq.nombre));
@@ -2993,23 +2967,8 @@ const obtenerJugadoresEvento = async (req, res) => {
       const byName = new Map(
         (actuales || []).map((p) => [normKey(p.nombreCompleto), p])
       );
-      const nombres = (eq.plantelNombres || []).filter(Boolean);
-      for (const n of nombres) addNombreLibre(byName, n);
-      const historicos = plantelExtraByTeam.get(normKey(eq.nombre)) || [];
-      for (const n of historicos) addNombreLibre(byName, n);
+      for (const n of (eq.plantelNombres || []).filter(Boolean)) addNombreLibre(byName, n);
       equiposMap.set(eq.nombre, Array.from(byName.values()));
-    }
-
-    // Persistir en Equipo.plantelNombres el union de planteles libres (evento + histórico)
-    for (const eq of ligaEquipos) {
-      if (!eq?.nombre) continue;
-      const toSync = uniquePlantelNames([
-        ...(Array.isArray(eq.plantelNombres) ? eq.plantelNombres : []),
-        ...(plantelExtraByTeam.get(normKey(eq.nombre)) || [])
-      ]);
-      if (toSync.length) {
-        syncPlantelAlClub(eq.nombre, toSync).catch(() => {});
-      }
     }
 
     const eventoNombreToId = new Map();
@@ -3017,7 +2976,11 @@ const obtenerJugadoresEvento = async (req, res) => {
       const evEq = ligaEquipos.find(e => e?.nombre && norm(e.nombre) === norm(dbNombre));
       if (evEq) eventoNombreToId.set(evEq.nombre, id);
     }
-    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({ nombre, id: eventoNombreToId.get(nombre) || nameToId.get(nombre) || null, jugadores }));
+    const equipos = Array.from(equiposMap.entries()).map(([nombre, jugadores]) => ({
+      nombre,
+      id: eventoNombreToId.get(nombre) || nameToId.get(nombre) || null,
+      jugadores
+    }));
 
     return res.json({ success: true, data: { equipos } });
   } catch (error) {

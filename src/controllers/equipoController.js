@@ -498,8 +498,11 @@ const obtenerJugadoresEquipo = async (req, res) => {
       });
     }
 
-    // Filtrar jugadores nulos (si no coinciden con el match)
-    const jugadores = equipo.jugadores.filter(j => j.jugador !== null);
+    // Filtrar jugadores nulos y membresías dadas de baja
+    const { isMembershipActive } = require('../utils/plantelSync');
+    const jugadores = equipo.jugadores.filter(
+      (j) => j.jugador !== null && (activo === 'false' || isMembershipActive(j))
+    );
 
     res.json({
       success: true,

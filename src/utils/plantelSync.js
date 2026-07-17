@@ -1,6 +1,6 @@
 /**
- * Sincronización aditiva plantel (nombres) ↔ Jugador + Equipo.jugadores.
- * No borra documentos Jugador; mantiene plantelNombres como espejo legible.
+ * Sincronización plantel (nombres) ↔ Jugador + Equipo.jugadores.
+ * Con replace:true baja membresías que no estén en la lista; no borra documentos Jugador.
  */
 const Jugador = require('../models/Jugador');
 const Equipo = require('../models/Equipo');
