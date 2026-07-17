@@ -346,6 +346,27 @@ const obtenerEstadisticasJugador = async (req, res) => {
         const evId = String(ev._id);
         let eventoBucket = porEventoMap.get(evId);
 
+        // Mapa fecha (YYYY-MM-DD) → jornada (explícita o derivada por orden de fechas)
+        const fechaKey = (f) => {
+          if (!f) return '';
+          try {
+            return String(f).split('T')[0];
+          } catch {
+            return '';
+          }
+        };
+        const fechasUnicas = [...new Set(
+          partidos.map((p) => fechaKey(p.fecha)).filter(Boolean)
+        )].sort();
+        const jornadaPorFecha = new Map();
+        fechasUnicas.forEach((fk, i) => jornadaPorFecha.set(fk, i + 1));
+        const resolverJornada = (p) => {
+          const n = parseInt(p?.jornada, 10);
+          if (Number.isFinite(n) && n >= 1) return n;
+          const fk = fechaKey(p?.fecha);
+          return fk ? (jornadaPorFecha.get(fk) || null) : null;
+        };
+
         for (const p of partidos) {
           const rows = Array.isArray(p?.estadisticasJugadores) ? p.estadisticasJugadores : [];
           const matchedRows = rows.filter((j) => normalizeName(j?.nombreJugador) === nameKey);
@@ -385,6 +406,7 @@ const obtenerEstadisticasJugador = async (req, res) => {
             partidoId: p._id ? String(p._id) : null,
             fecha: p.fecha || null,
             hora: p.hora || null,
+            jornada: resolverJornada(p),
             equipoLocal: p.equipoLocal || '',
             equipoVisitante: p.equipoVisitante || '',
             golesLocal: p.golesLocal ?? null,
@@ -415,9 +437,12 @@ const obtenerEstadisticasJugador = async (req, res) => {
       .map((ev) => ({
         ...ev,
         partidos: [...ev.partidos].sort((a, b) => {
+          const ja = a.jornada || 0;
+          const jb = b.jornada || 0;
+          if (ja !== jb) return ja - jb;
           const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
           const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
-          return fb - fa;
+          return fa - fb;
         })
       }))
       .sort((a, b) => {

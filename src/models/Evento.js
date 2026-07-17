@@ -179,6 +179,8 @@ const eventoSchema = new mongoose.Schema({
       }],
       partidos: [{
         fecha: Date,
+        hora: String,
+        jornada: { type: Number, min: 1 },
         equipoLocal: String,
         equipoVisitante: String,
         golesLocal: Number,
