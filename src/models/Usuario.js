@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
 const usuarioSchema = new mongoose.Schema({
   nombre: {
@@ -78,19 +77,6 @@ usuarioSchema.pre('save', async function(next) {
 // Método para comparar contraseñas
 usuarioSchema.methods.compararPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
-};
-
-// Método para generar token JWT
-usuarioSchema.methods.generarJWT = function() {
-  return jwt.sign(
-    { 
-      id: this._id, 
-      email: this.email, 
-      rol: this.rol 
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
 };
 
 // Método para obtener datos públicos del usuario

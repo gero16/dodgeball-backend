@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const Usuario = require('../models/Usuario');
+const Sesion = require('../models/Sesion');
 const { hasMinRole, ROLES } = require('../utils/roles');
 
 const auth = async (req, res, next) => {
@@ -13,7 +14,42 @@ const auth = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      const mensaje = err.name === 'TokenExpiredError'
+        ? 'Sesión expirada. Volvé a iniciar sesión.'
+        : 'Token inválido';
+      return res.status(401).json({
+        success: false,
+        message: mensaje
+      });
+    }
+
+    // Tokens nuevos llevan jti y deben existir como sesión activa en DB
+    if (decoded.jti) {
+      const sesion = await Sesion.findOne({ jti: decoded.jti, activa: true });
+      if (!sesion) {
+        return res.status(401).json({
+          success: false,
+          message: 'Sesión cerrada o inválida. Volvé a iniciar sesión.'
+        });
+      }
+
+      // Actualizar último uso de forma diferida (no bloquea la request)
+      const hace5Min = Date.now() - 5 * 60 * 1000;
+      if (!sesion.ultimoUso || new Date(sesion.ultimoUso).getTime() < hace5Min) {
+        Sesion.updateOne(
+          { _id: sesion._id },
+          { ultimoUso: new Date() }
+        ).catch(() => {});
+      }
+
+      req.sesion = sesion;
+      req.jti = decoded.jti;
+    }
+
     const usuario = await Usuario.findById(decoded.id).select('-password');
 
     if (!usuario || !usuario.activo) {

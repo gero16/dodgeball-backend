@@ -51,7 +51,7 @@ MONGODB_URI=mongodb://localhost:27017/dodgeball-club
 
 # JWT
 JWT_SECRET=tu_jwt_secret_muy_seguro_aqui
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=never
 
 # Frontend
 FRONTEND_URL=http://localhost:5173

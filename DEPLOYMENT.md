@@ -12,7 +12,7 @@ MONGODB_URI=mongodb+srv://usuario_node:usuario_node@cluster0.onw6d.mongodb.net/d
 NODE_ENV=production
 PORT=3000
 JWT_SECRET=tu_jwt_secret_muy_seguro_para_produccion
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=never
 FRONTEND_URL=https://tu-frontend.com
 
 # Email (opcional)
