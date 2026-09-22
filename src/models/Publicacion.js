@@ -15,6 +15,10 @@ const publicacionSchema = new mongoose.Schema({
     type: String,
     maxlength: [500, 'El resumen no puede tener más de 500 caracteres']
   },
+  transcripcion: {
+    type: String,
+    default: ''
+  },
   imagen: {
     type: String,
     default: ''

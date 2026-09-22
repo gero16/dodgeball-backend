@@ -61,6 +61,11 @@ const validatePublicacion = [
     .trim()
     .isLength({ min: 10 })
     .withMessage('El contenido debe tener al menos 10 caracteres'),
+
+  body('transcripcion')
+    .optional({ checkFalsy: true })
+    .isString()
+    .withMessage('La transcripción debe ser texto'),
   
   body('categoria')
     .isIn(['noticias', 'eventos', 'torneos', 'entrenamientos', 'general'])

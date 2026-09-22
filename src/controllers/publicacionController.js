@@ -24,6 +24,7 @@ const obtenerPublicaciones = async (req, res) => {
       filtros.$or = [
         { titulo: { $regex: busqueda, $options: 'i' } },
         { contenido: { $regex: busqueda, $options: 'i' } },
+        { transcripcion: { $regex: busqueda, $options: 'i' } },
         { etiquetas: { $in: [new RegExp(busqueda, 'i')] } }
       ];
     }
@@ -93,7 +94,7 @@ const obtenerPublicacion = async (req, res) => {
 // Crear nueva publicación
 const crearPublicacion = async (req, res) => {
   try {
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
+    const { titulo, contenido, resumen, transcripcion, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
     const allowUnauth = process.env.ALLOW_UNAUTH_PUBLICATIONS === 'true';
     let autorId = req.usuario?.id || process.env.DEFAULT_AUTHOR_ID;
 
@@ -113,6 +114,7 @@ const crearPublicacion = async (req, res) => {
       titulo,
       contenido,
       resumen,
+      transcripcion: typeof transcripcion === 'string' ? transcripcion : '',
       categoria,
       etiquetas: Array.isArray(etiquetas) ? etiquetas : (etiquetas ? [etiquetas] : []),
       destacada: destacada || false,
@@ -143,7 +145,7 @@ const crearPublicacion = async (req, res) => {
 const actualizarPublicacion = async (req, res) => {
   try {
     const { id } = req.params;
-    const { titulo, contenido, resumen, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
+    const { titulo, contenido, resumen, transcripcion, categoria, etiquetas, destacada, imagenPosY, fechaPublicacion } = req.body;
     const usuarioId = req.usuario?.id;
 
     const publicacion = await Publicacion.findById(id);
@@ -172,6 +174,7 @@ const actualizarPublicacion = async (req, res) => {
     if (titulo) publicacion.titulo = titulo;
     if (contenido) publicacion.contenido = contenido;
     if (resumen !== undefined) publicacion.resumen = resumen;
+    if (transcripcion !== undefined) publicacion.transcripcion = typeof transcripcion === 'string' ? transcripcion : '';
     if (categoria) publicacion.categoria = categoria;
     if (etiquetas) publicacion.etiquetas = etiquetas;
     if (destacada !== undefined) publicacion.destacada = destacada;
