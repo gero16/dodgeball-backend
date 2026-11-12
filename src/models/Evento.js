@@ -54,7 +54,7 @@ const eventoSchema = new mongoose.Schema({
   },
   categoria: {
     type: String,
-    enum: ['principiante', 'intermedio', 'avanzado', 'mixto'],
+    enum: ['principiante', 'intermedio', 'avanzado', 'mixto', 'juvenil', 'adulto', 'fecha-especial'],
     default: 'mixto'
   },
   rol: {
