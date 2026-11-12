@@ -91,7 +91,7 @@ const obtenerJugador = async (req, res) => {
 // Obtener todos los jugadores
 const obtenerJugadores = async (req, res) => {
   try {
-    const { activo, equipo, posicion, limite = 20, pagina = 1 } = req.query;
+    const { activo, equipo, posicion, buscar, limite = 20, pagina = 1 } = req.query;
 
     let query = {};
     
@@ -101,6 +101,18 @@ const obtenerJugadores = async (req, res) => {
     
     if (posicion) {
       query.posicion = posicion;
+    }
+
+    const textoBusqueda = typeof buscar === 'string' ? buscar.trim() : '';
+    if (textoBusqueda) {
+      const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const partes = textoBusqueda.split(/\s+/).filter(Boolean).map(escapeRegex);
+      query.$and = partes.map((parte) => ({
+        $or: [
+          { nombre: { $regex: parte, $options: 'i' } },
+          { apellido: { $regex: parte, $options: 'i' } }
+        ]
+      }));
     }
 
     const skip = (parseInt(pagina) - 1) * parseInt(limite);
@@ -615,34 +627,39 @@ const agregarJugadorAEquipo = async (req, res) => {
       });
     }
 
-    // Verificar si el jugador ya está en el equipo
-    const yaEnEquipo = equipo.jugadores.find(
-      j => j.jugador.toString() === jugadorId
+    // Verificar membresía activa; si estaba dada de baja, reactivar
+    const { isMembershipActive, mirrorJugadorNameIntoPlantel, uniquePlantelNames, propagatePlantelNombresToEventos } = require('../utils/plantelSync');
+    const ahora = new Date();
+    const yaEnEquipo = (equipo.jugadores || []).find(
+      (j) => j.jugador && j.jugador.toString() === jugadorId
     );
 
-    if (yaEnEquipo) {
+    if (yaEnEquipo && isMembershipActive(yaEnEquipo, ahora)) {
       return res.status(400).json({
         success: false,
         message: 'El jugador ya está en este equipo'
       });
     }
 
-    // Agregar jugador al equipo
-    equipo.jugadores.push({
-      jugador: jugadorId,
-      numeroCamiseta: numeroCamiseta || null,
-      posicion: posicion || jugador.posicion,
-      fechaIngreso: new Date(),
-      fechaHasta: null,
-      activo: true
-    });
+    if (yaEnEquipo) {
+      yaEnEquipo.activo = true;
+      yaEnEquipo.fechaIngreso = ahora;
+      yaEnEquipo.fechaHasta = null;
+      yaEnEquipo.numeroCamiseta = numeroCamiseta || yaEnEquipo.numeroCamiseta || null;
+      yaEnEquipo.posicion = posicion || yaEnEquipo.posicion || jugador.posicion;
+      equipo.markModified('jugadores');
+    } else {
+      equipo.jugadores.push({
+        jugador: jugadorId,
+        numeroCamiseta: numeroCamiseta || null,
+        posicion: posicion || jugador.posicion,
+        fechaIngreso: ahora,
+        fechaHasta: null,
+        activo: true
+      });
+    }
 
     // Espejo aditivo en plantelNombres (compat UI / eventos)
-    const {
-      mirrorJugadorNameIntoPlantel,
-      uniquePlantelNames,
-      propagatePlantelNombresToEventos
-    } = require('../utils/plantelSync');
     await mirrorJugadorNameIntoPlantel(equipo, jugador);
     await equipo.save();
 

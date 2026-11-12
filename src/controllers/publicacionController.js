@@ -2,6 +2,18 @@ const Publicacion = require('../models/Publicacion');
 const mongoose = require('mongoose');
 const { isStaff } = require('../utils/roles');
 
+const parseBoolean = (value) => {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+    return undefined;
+  }
+  return Boolean(value);
+};
+
 // Obtener todas las publicaciones
 const obtenerPublicaciones = async (req, res) => {
   try {
@@ -10,7 +22,7 @@ const obtenerPublicaciones = async (req, res) => {
       limite = 10, 
       categoria = '', 
       busqueda = '', 
-      destacadas = false 
+      destacadas 
     } = req.query;
     
     const skip = (pagina - 1) * limite;
@@ -18,7 +30,8 @@ const obtenerPublicaciones = async (req, res) => {
 
     // Filtros
     if (categoria) filtros.categoria = categoria;
-    if (destacadas === 'true') filtros.destacada = true;
+    const destacadasFiltro = parseBoolean(destacadas);
+    if (destacadasFiltro !== undefined) filtros.destacada = destacadasFiltro;
     
     if (busqueda) {
       filtros.$or = [
@@ -117,7 +130,7 @@ const crearPublicacion = async (req, res) => {
       transcripcion: typeof transcripcion === 'string' ? transcripcion : '',
       categoria,
       etiquetas: Array.isArray(etiquetas) ? etiquetas : (etiquetas ? [etiquetas] : []),
-      destacada: destacada || false,
+      destacada: parseBoolean(destacada) ?? false,
       autor: autorId,
       imagen: req.file ? req.file.path : '',
       imagenPosY: Number.isFinite(parseInt(imagenPosY)) ? Math.max(0, Math.min(100, parseInt(imagenPosY))) : 50,
@@ -176,8 +189,17 @@ const actualizarPublicacion = async (req, res) => {
     if (resumen !== undefined) publicacion.resumen = resumen;
     if (transcripcion !== undefined) publicacion.transcripcion = typeof transcripcion === 'string' ? transcripcion : '';
     if (categoria) publicacion.categoria = categoria;
-    if (etiquetas) publicacion.etiquetas = etiquetas;
-    if (destacada !== undefined) publicacion.destacada = destacada;
+    if (etiquetas !== undefined) {
+      publicacion.etiquetas = Array.isArray(etiquetas)
+        ? etiquetas
+        : (typeof etiquetas === 'string'
+            ? etiquetas.split(',').map((t) => t.trim()).filter(Boolean)
+            : []);
+    }
+    if (destacada !== undefined) {
+      const destacadaParsed = parseBoolean(destacada);
+      if (destacadaParsed !== undefined) publicacion.destacada = destacadaParsed;
+    }
     if (imagenPosY !== undefined) {
       const val = parseInt(imagenPosY);
       if (Number.isFinite(val)) publicacion.imagenPosY = Math.max(0, Math.min(100, val));
