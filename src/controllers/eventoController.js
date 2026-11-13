@@ -723,7 +723,9 @@ const obtenerEventos = async (req, res) => {
     const { 
       pagina = 1, 
       limite = 10, 
-      tipo = '', 
+      tipo = '',
+      tipos = '',
+      excluirTipo = '',
       busqueda = '', 
       proximos = false,
       pasados = false
@@ -733,8 +735,22 @@ const obtenerEventos = async (req, res) => {
     let filtros = { activo: true };
     let sort = { fecha: 1 };
 
-    // Filtros
-    if (tipo) filtros.tipo = tipo;
+    // Filtros de tipo (excluirTipo > tipos > tipo)
+    if (excluirTipo) {
+      const excluidos = String(excluirTipo)
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (excluidos.length > 0) filtros.tipo = { $nin: excluidos };
+    } else if (tipos) {
+      const incluidos = String(tipos)
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (incluidos.length > 0) filtros.tipo = { $in: incluidos };
+    } else if (tipo) {
+      filtros.tipo = tipo;
+    }
     
     if (busqueda) {
       filtros.$or = [
