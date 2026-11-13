@@ -112,7 +112,7 @@ const validateEvento = [
     .withMessage('Formato de hora inválido (HH:MM)'),
   
   body('tipo')
-    .isIn(['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'campeonato', 'practica', 'casual', 'no-deportivo'])
+    .isIn(['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'campeonato', 'practica', 'casual', 'no-deportivo', 'especial'])
     .withMessage('Tipo de evento inválido'),
   
   body('cupoMaximo')

@@ -44,7 +44,7 @@ const eventoSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: [true, 'El tipo es obligatorio'],
-    enum: ['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'casual', 'campeonato', 'practica', 'no-deportivo']
+    enum: ['torneo', 'entrenamiento', 'liga', 'social', 'benefico', 'casual', 'campeonato', 'practica', 'no-deportivo', 'especial']
   },
   tipoJuego: {
     type: String,
