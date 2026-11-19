@@ -54,7 +54,7 @@ const obtenerPublicaciones = async (req, res) => {
     const filtros = {};
     if (todas !== 'true') filtros.activa = true;
 
-    let query = PublicacionInstagram.find(filtros).sort({ orden: 1, createdAt: -1 });
+    let query = PublicacionInstagram.find(filtros).sort({ createdAt: -1, orden: 1 });
     if (limite) query = query.limit(parseInt(limite, 10));
 
     const publicaciones = await query;
