@@ -41,6 +41,12 @@ const normalizarUrlInstagram = (raw) => {
 
 const esReel = (url) => /\/reel\//i.test(url || '');
 
+/** Orden más bajo = se muestra primero. Las nuevas van al inicio. */
+const siguienteOrdenAlInicio = async () => {
+  const primero = await PublicacionInstagram.findOne().sort({ orden: 1 }).select('orden');
+  return (primero?.orden ?? 1) - 1;
+};
+
 // Listado: públicas solo activas; con ?todas=true requiere adminAuth (ver ruta)
 const obtenerPublicaciones = async (req, res) => {
   try {
@@ -88,6 +94,8 @@ const crearPublicacion = async (req, res) => {
       if (req.body.orden !== undefined) {
         const o = Number(req.body.orden);
         if (Number.isFinite(o)) existente.orden = o;
+      } else {
+        existente.orden = await siguienteOrdenAlInicio();
       }
       await existente.save();
       return res.status(200).json({
@@ -99,8 +107,7 @@ const crearPublicacion = async (req, res) => {
 
     let orden = Number(req.body.orden);
     if (!Number.isFinite(orden)) {
-      const ultimo = await PublicacionInstagram.findOne().sort({ orden: -1 }).select('orden');
-      orden = (ultimo?.orden ?? -1) + 1;
+      orden = await siguienteOrdenAlInicio();
     }
 
     const publicacion = await PublicacionInstagram.create({
